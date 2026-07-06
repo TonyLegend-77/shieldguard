@@ -62,6 +62,9 @@ async function main() {
   console.log(`ShieldGuard listener on chain ${process.env.CHAIN_ID || "unknown"}...`);
   startServer();
 
+  const watched = [];
+  const startBlock = await provider.getBlockNumber();
+
   for (const target of TARGETS) {
     if (!target.address) {
       console.warn(`Skipping ${target.name}: no address in .env`);
@@ -72,7 +75,7 @@ async function main() {
     console.log(`Watching ${target.name} (${target.address})`);
     registerGuardian(target.name, target.address);
 
-    contract.on("Approval", async (owner, spender, value, event) => {
+    const handleApproval = async (owner, spender, value, event) => {
       try {
         const ownerBalance = await contract.balanceOf(owner);
         const result = evaluateApproval({ owner, spender, value, ownerBalance });
@@ -151,9 +154,9 @@ async function main() {
       } catch (err) {
         console.error(`[${target.name}] Error:`, err.message);
       }
-    });
+    };
 
-    contract.on("Transfer", (from, to, value, event) => {
+    const handleTransfer = (from, to, value, event) => {
       console.log(`[${target.name}] Transfer ${short(from)} -> ${short(to)}`);
       recordEvent({
         token: target.name,
@@ -169,10 +172,39 @@ async function main() {
         verdict: null,
         anchored: false,
       });
-    });
+    };
+
+    watched.push({ target, contract, lastBlock: startBlock, handleApproval, handleTransfer });
   }
 
-  console.log("Listening (polling every 4s)... leave this running.");
+  // Poll for logs per block range instead of using eth_newFilter/eth_getFilterChanges,
+  // since some RPC endpoints (load-balanced or short-lived) drop server-side filters.
+  provider.on("block", async (blockNumber) => {
+    for (const w of watched) {
+      const fromBlock = w.lastBlock + 1;
+      if (fromBlock > blockNumber) continue;
+
+      try {
+        const approvalLogs = await w.contract.queryFilter("Approval", fromBlock, blockNumber);
+        for (const log of approvalLogs) {
+          const { owner, spender, value } = log.args;
+          await w.handleApproval(owner, spender, value, { log });
+        }
+
+        const transferLogs = await w.contract.queryFilter("Transfer", fromBlock, blockNumber);
+        for (const log of transferLogs) {
+          const { from, to, value } = log.args;
+          w.handleTransfer(from, to, value, { log });
+        }
+
+        w.lastBlock = blockNumber;
+      } catch (err) {
+        console.error(`[${w.target.name}] Poll error:`, err.message);
+      }
+    }
+  });
+
+  console.log("Listening (polling every 4s via block-range queries)... leave this running.");
 }
 
 main().catch((err) => {
