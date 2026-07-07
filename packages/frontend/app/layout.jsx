@@ -1,3 +1,4 @@
+import './globals.css';
 export const metadata = {
   title: 'ShieldGuard — Sentinel Console',
   description: 'Live on-chain threat monitoring for BOT Chain',
