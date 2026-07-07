@@ -1,4 +1,4 @@
-# ShieldGuard — BOT Chain Security Flight Recorder
+# ShieldGuard: BOTChain Security Flight Recorder
 
 A full-stack security monitoring system for BOT Chain that watches token approvals/transfers, flags risky patterns, generates AI verdicts, cryptographically signs findings, and anchors them on-chain.
 
@@ -41,7 +41,7 @@ A full-stack security monitoring system for BOT Chain that watches token approva
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/shieldguard.git
+git clone https://github.com/TonyLegend-77/shieldguard.git
 cd shieldguard
 npm install
 ```
