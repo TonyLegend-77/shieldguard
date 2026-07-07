@@ -164,6 +164,9 @@ async function main() {
                     token: target.name,
                     risk: result.risk,
                     rules: result.matched_rules,
+                    reason: result.reason,
+                    verdict: verdict?.summary || null,
+                    txHash: record.txHash,
                   })
                 );
                 await tx.wait();
