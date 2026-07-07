@@ -91,6 +91,48 @@ async function ensureReceiptRegistry() {
   }
 }
 
+// Since this server has no persistent disk, we rebuild the flagged/anchored
+// history on every restart by reading it straight back off the chain —
+// the chain is the durable copy, not this process's memory.
+async function rehydrateFromChain(receiptRegistry) {
+  if (!receiptRegistry) return;
+
+  try {
+    console.log("[rehydrate] Reloading flagged history from ReceiptRegistry...");
+    const filter = receiptRegistry.filters.ReceiptAnchored();
+    const events = await receiptRegistry.queryFilter(filter, 0, "latest");
+    console.log(`[rehydrate] Found ${events.length} anchored receipt(s) on-chain.`);
+
+    for (const ev of events) {
+      try {
+        const { contentHash, submitter, metadata } = ev.args;
+        const parsed = JSON.parse(metadata);
+
+        recordEvent({
+          token: parsed.token || "UNKNOWN",
+          tokenAddress: null,
+          from: submitter,
+          to: null,
+          severity: parsed.risk || "HIGH",
+          reason: parsed.reason || "Recovered from on-chain receipt",
+          rules: parsed.rules || [],
+          txHash: parsed.txHash || ev.transactionHash,
+          signed: true,
+          hash: contentHash,
+          verdict: parsed.verdict || null,
+          anchored: true,
+        });
+      } catch (err) {
+        console.error("[rehydrate] Could not parse one receipt:", err.message);
+      }
+    }
+
+    console.log("[rehydrate] Done.");
+  } catch (err) {
+    console.error("[rehydrate] Failed to query past events:", err.message);
+  }
+}
+
 async function main() {
   if (!process.env.RPC_URL) {
     console.error("Set RPC_URL in Railway variables. Confirmed testnet: https://rpc.bohr.life");
@@ -222,6 +264,8 @@ async function main() {
 
     watched.push({ target, contract, lastBlock: startBlock, handleApproval, handleTransfer });
   }
+
+  await rehydrateFromChain(receiptRegistry);
 
   // Guard against overlapping cycles: if a previous block's anchoring
   // transaction is still confirming when the next block arrives, skip
