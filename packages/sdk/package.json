@@ -1,0 +1,10 @@
+{
+  "name": "@shieldguard/sdk",
+  "version": "1.0.0",
+  "description": "Non-custodial pre-signing firewall for wallets and AI agents on BOT Chain, backed by ShieldGuard.",
+  "type": "module",
+  "main": "src/index.js",
+  "dependencies": {
+    "ethers": "^6.9.0"
+  }
+}
