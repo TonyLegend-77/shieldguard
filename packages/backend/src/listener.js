@@ -3,7 +3,12 @@ import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { JsonRpcProvider, Contract, ContractFactory, Wallet, formatEther } from "ethers";
-import { evaluateApproval } from "./ruleEngine.js";
+import {
+  evaluateApproval,
+  evaluateApprovalForAll,
+  evaluateAdminEvent,
+  evaluateTransferSpoof,
+} from "./ruleEngine.js";
 import { registerGuardian, recordEvent, canMonitorContract } from "./store.js";
 import { startServer } from "./server.js";
 import { generateVerdict } from "./policyEngine.js";
@@ -16,9 +21,20 @@ function short(addr) {
   return addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
 }
 
+// Extended beyond plain ERC-20 Approval/Transfer to also cover:
+// - ApprovalForAll (ERC-721/1155 blanket approval — NFT drainer vector)
+// - OwnershipTransferred / Paused / Unpaused (admin/owner privileged calls)
+// Querying for a fragment a given contract never actually emits is harmless —
+// queryFilter matches on topic hash against that contract's logs and simply
+// returns zero results, so this is safe to share across every watched
+// contract (ERC-20, ERC-721, ERC-1155) without per-type branching.
 const ERC20_ABI = [
   "event Approval(address indexed owner, address indexed spender, uint256 value)",
   "event Transfer(address indexed from, address indexed to, uint256 value)",
+  "event ApprovalForAll(address indexed owner, address indexed operator, bool approved)",
+  "event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)",
+  "event Paused(address account)",
+  "event Unpaused(address account)",
   "function balanceOf(address account) view returns (uint256)",
 ];
 
@@ -26,6 +42,31 @@ const TARGETS = [
   { name: "WBOT", address: process.env.WBOT_ADDRESS },
   { name: "USDT", address: process.env.USDT_ADDRESS },
 ];
+
+// Known-good NFT marketplace operator addresses (e.g. Seaport/OpenSea
+// conduits) that shouldn't be scored as harshly when granted blanket
+// setApprovalForAll — comma-separated in Railway env, empty by default
+// since BOT Chain testnet has no canonical marketplace yet.
+const KNOWN_NFT_OPERATORS = (process.env.KNOWN_NFT_OPERATORS || "")
+  .split(",")
+  .map((a) => a.trim())
+  .filter(Boolean);
+
+// Per-target memory of "to" addresses this contract has already paid, used
+// by the address-poisoning heuristic (evaluateTransferSpoof) to spot
+// zero-value transfers from lookalike addresses. Address-only, in-memory —
+// same durability tradeoff as the rest of this listener's live state.
+const seenAddressesByTarget = new Map(); // key: lowercase token address -> Set<address>
+
+function trackSeenAddress(tokenAddress, addr) {
+  const key = tokenAddress.toLowerCase();
+  if (!seenAddressesByTarget.has(key)) seenAddressesByTarget.set(key, new Set());
+  seenAddressesByTarget.get(key).add(addr);
+}
+
+function getSeenAddresses(tokenAddress) {
+  return Array.from(seenAddressesByTarget.get(tokenAddress.toLowerCase()) || []);
+}
 
 let signatureService = null;
 if (process.env.SIGNER_PRIVATE_KEY) {
@@ -145,122 +186,199 @@ async function rehydrateFromChain(registry) {
   }
 }
 
-// Builds the Approval/Transfer handlers for one target. Shared by both the
-// static TARGETS loop at startup and addDynamicWatch() at runtime, so a
-// contract added later via /monitor gets identical treatment (rule engine ->
-// AI verdict -> signature -> on-chain anchor -> store) as WBOT/USDT.
+// Shared verdict -> sign -> anchor -> record pipeline. Any detector (ERC-20
+// approval, ApprovalForAll, admin event, spoofed transfer) that produces a
+// { risk, matched_rules, reason, ... } result from ruleEngine.js runs through
+// this exact same path, so every rule gets identical treatment: an AI
+// verdict, a signature, and an on-chain anchored receipt once flagged.
+async function processFlaggedResult(target, result, { txHash, from, to }) {
+  const gate = canMonitorContract(target.address);
+
+  const record = {
+    token: target.name,
+    tokenAddress: target.address,
+    txHash,
+    timestamp: new Date().toISOString(),
+    ...result,
+  };
+
+  let verdict = null;
+  let signatureData = null;
+  let anchored = false;
+
+  if (result.risk !== "LOW" && gate.canMonitor) {
+    console.log("🚨 FLAGGED:", JSON.stringify(record, null, 2));
+
+    try {
+      verdict = await generateVerdict(record);
+      console.log("[verdict]", verdict.summary);
+    } catch (err) {
+      console.error("[verdict] Error:", err.message);
+    }
+
+    if (signatureService && verdict) {
+      try {
+        signatureData = await signatureService.signVerdict(record, verdict);
+        console.log("[signed] By:", signatureData.signerAddress);
+      } catch (err) {
+        console.error("[signed] Error:", err.message);
+      }
+    }
+
+    if (receiptRegistry && signatureData) {
+      try {
+        const alreadyAnchored = await receiptRegistry.isAnchored(signatureData.contentHash);
+        if (!alreadyAnchored) {
+          const tx = await receiptRegistry.anchorReceipt(
+            signatureData.contentHash,
+            JSON.stringify({
+              token: target.name,
+              tokenAddress: target.address,
+              risk: result.risk,
+              rules: result.matched_rules,
+              reason: result.reason,
+              verdict: verdict?.summary || null,
+              txHash,
+            })
+          );
+          await tx.wait();
+          anchored = true;
+          console.log("[anchor] ✅ Anchored:", signatureData.contentHash.slice(0, 20) + "...");
+        } else {
+          console.log("[anchor] Already anchored:", signatureData.contentHash.slice(0, 20) + "...");
+        }
+      } catch (err) {
+        console.error("[anchor] Error:", err.message);
+      }
+    }
+  } else if (result.risk !== "LOW" && !gate.canMonitor) {
+    console.log(`[${target.name}] FLAGGED but quota exhausted — skipping verdict/sign/anchor: ${gate.reason}`);
+  }
+
+  recordEvent({
+    token: target.name,
+    tokenAddress: target.address,
+    from: from ? short(from) : null,
+    to: to ? short(to) : null,
+    severity: result.risk,
+    reason: result.reason,
+    rules: result.matched_rules,
+    txHash,
+    signed: !!signatureData,
+    hash: signatureData?.contentHash || null,
+    verdict: verdict?.summary || null,
+    anchored,
+  });
+
+  return { verdict, signatureData, anchored };
+}
+
+// Builds the event handlers for one target. Shared by both the static
+// TARGETS loop at startup and addDynamicWatch() at runtime, so a contract
+// added later via /monitor gets identical treatment (rule engine -> AI
+// verdict -> signature -> on-chain anchor -> store) as WBOT/USDT.
 function createHandlers(target, contract) {
   const handleApproval = async (owner, spender, value, event) => {
     try {
-      // Non-admin contracts stop accruing new signed/anchored activity once
-      // their tx quota is used up. We still let LOW-risk approvals pass
-      // through as visibility, but skip the paid pipeline (verdict/sign/anchor).
-      const gate = canMonitorContract(target.address);
-
       const ownerBalance = await contract.balanceOf(owner);
       const result = evaluateApproval({ owner, spender, value, ownerBalance });
-
-      const record = {
-        token: target.name,
-        tokenAddress: target.address,
-        txHash: event.log.transactionHash,
-        timestamp: new Date().toISOString(),
-        ...result,
-      };
-
-      let verdict = null;
-      let signatureData = null;
-      let anchored = false;
-
-      if (result.risk !== "LOW" && gate.canMonitor) {
-        console.log("🚨 FLAGGED:", JSON.stringify(record, null, 2));
-
-        try {
-          verdict = await generateVerdict(record);
-          console.log("[verdict]", verdict.summary);
-        } catch (err) {
-          console.error("[verdict] Error:", err.message);
-        }
-
-        if (signatureService && verdict) {
-          try {
-            signatureData = await signatureService.signVerdict(record, verdict);
-            console.log("[signed] By:", signatureData.signerAddress);
-          } catch (err) {
-            console.error("[signed] Error:", err.message);
-          }
-        }
-
-        if (receiptRegistry && signatureData) {
-          try {
-            const alreadyAnchored = await receiptRegistry.isAnchored(signatureData.contentHash);
-            if (!alreadyAnchored) {
-              const tx = await receiptRegistry.anchorReceipt(
-                signatureData.contentHash,
-                JSON.stringify({
-                  token: target.name,
-                  tokenAddress: target.address,
-                  risk: result.risk,
-                  rules: result.matched_rules,
-                  reason: result.reason,
-                  verdict: verdict?.summary || null,
-                  txHash: record.txHash,
-                })
-              );
-              await tx.wait();
-              anchored = true;
-              console.log("[anchor] ✅ Anchored:", signatureData.contentHash.slice(0, 20) + "...");
-            } else {
-              console.log("[anchor] Already anchored:", signatureData.contentHash.slice(0, 20) + "...");
-            }
-          } catch (err) {
-            console.error("[anchor] Error:", err.message);
-          }
-        }
-      } else if (result.risk !== "LOW" && !gate.canMonitor) {
-        console.log(`[${target.name}] FLAGGED but quota exhausted — skipping verdict/sign/anchor: ${gate.reason}`);
-      } else {
+      if (result.risk === "LOW") {
         console.log(`[${target.name}] Approval OK — ${short(owner)} -> ${short(spender)}`);
       }
-
-      recordEvent({
-        token: target.name,
-        tokenAddress: target.address,
-        from: short(owner),
-        to: short(spender),
-        severity: result.risk,
-        reason: result.reason,
-        rules: result.matched_rules,
+      await processFlaggedResult(target, result, {
         txHash: event.log.transactionHash,
-        signed: !!signatureData,
-        hash: signatureData?.contentHash || null,
-        verdict: verdict?.summary || null,
-        anchored,
+        from: owner,
+        to: spender,
       });
     } catch (err) {
-      console.error(`[${target.name}] Error:`, err.message);
+      console.error(`[${target.name}] Error (Approval):`, err.message);
     }
   };
 
-  const handleTransfer = (from, to, value, event) => {
-    console.log(`[${target.name}] Transfer ${short(from)} -> ${short(to)}`);
-    recordEvent({
-      token: target.name,
-      tokenAddress: target.address,
-      from: short(from),
-      to: short(to),
-      severity: "LOW",
-      reason: "Standard transfer, no risk signals",
-      rules: [],
-      txHash: event.log.transactionHash,
-      signed: false,
-      hash: null,
-      verdict: null,
-      anchored: false,
-    });
+  // ERC-721/1155 setApprovalForAll — blanket collection-wide approval.
+  // Wired the same way as handleApproval: rule engine result flows straight
+  // into the shared verdict/sign/anchor pipeline.
+  const handleApprovalForAll = async (owner, operator, approved, event) => {
+    try {
+      const result = evaluateApprovalForAll({
+        owner,
+        operator,
+        approved,
+        knownOperators: KNOWN_NFT_OPERATORS,
+      });
+      if (result.risk === "LOW") {
+        console.log(`[${target.name}] ApprovalForAll OK — ${short(owner)} -> ${short(operator)} (approved=${approved})`);
+      }
+      await processFlaggedResult(target, result, {
+        txHash: event.log.transactionHash,
+        from: owner,
+        to: operator,
+      });
+    } catch (err) {
+      console.error(`[${target.name}] Error (ApprovalForAll):`, err.message);
+    }
   };
 
-  return { handleApproval, handleTransfer };
+  // Admin/owner privileged calls: OwnershipTransferred, Paused, Unpaused.
+  // expectedOwner isn't wired to a config source yet (no baseline-owner
+  // registry exists) — passed as null so every OwnershipTransferred is
+  // scored as A001 (HIGH) rather than A003 (CRITICAL) until that baseline
+  // is added.
+  const handleAdminEvent = async (eventName, args, event) => {
+    try {
+      const result = evaluateAdminEvent({ eventName, args, expectedOwner: null });
+      console.log(`[${target.name}] Admin event: ${eventName}`, args);
+      await processFlaggedResult(target, result, {
+        txHash: event.log.transactionHash,
+        from: args.previousOwner || args.account || null,
+        to: args.newOwner || null,
+      });
+    } catch (err) {
+      console.error(`[${target.name}] Error (${eventName}):`, err.message);
+    }
+  };
+
+  const handleTransfer = async (from, to, value, event) => {
+    console.log(`[${target.name}] Transfer ${short(from)} -> ${short(to)}`);
+
+    // Address-poisoning check runs before this "to" address is remembered,
+    // so it's only ever compared against addresses seen on *prior* transfers.
+    const result = evaluateTransferSpoof({
+      from,
+      to,
+      value,
+      watchAddresses: getSeenAddresses(target.address),
+    });
+    trackSeenAddress(target.address, to);
+
+    if (result.risk === "LOW") {
+      recordEvent({
+        token: target.name,
+        tokenAddress: target.address,
+        from: short(from),
+        to: short(to),
+        severity: "LOW",
+        reason: "Standard transfer, no risk signals",
+        rules: [],
+        txHash: event.log.transactionHash,
+        signed: false,
+        hash: null,
+        verdict: null,
+        anchored: false,
+      });
+    } else {
+      // Flagged as possible address poisoning (T001) or unsolicited dust
+      // (T002) — runs through the full verdict/sign/anchor pipeline like
+      // any other detector.
+      await processFlaggedResult(target, result, {
+        txHash: event.log.transactionHash,
+        from,
+        to,
+      });
+    }
+  };
+
+  return { handleApproval, handleApprovalForAll, handleAdminEvent, handleTransfer };
 }
 
 // Called by webhook.js when a new contract is registered via /monitor,
@@ -279,10 +397,10 @@ export async function addDynamicWatch(name, address, options = {}) {
   const guardian = registerGuardian(name, address, options);
   const target = { name, address };
   const contract = new Contract(address, ERC20_ABI, provider);
-  const { handleApproval, handleTransfer } = createHandlers(target, contract);
+  const { handleApproval, handleApprovalForAll, handleAdminEvent, handleTransfer } = createHandlers(target, contract);
 
   const lastBlock = await provider.getBlockNumber();
-  watched.push({ target, contract, lastBlock, handleApproval, handleTransfer });
+  watched.push({ target, contract, lastBlock, handleApproval, handleApprovalForAll, handleAdminEvent, handleTransfer });
 
   console.log(`[listener] Now dynamically watching ${name} (${address}) — tier: ${guardian.tier}, limit: ${guardian.txLimit}`);
   return { ok: true, guardian };
@@ -326,8 +444,8 @@ async function main() {
     console.log(`Watching ${target.name} (${target.address})`);
     registerGuardian(target.name, target.address); // addedBy defaults to 'admin' -> unlimited
 
-    const { handleApproval, handleTransfer } = createHandlers(target, contract);
-    watched.push({ target, contract, lastBlock: startBlock, handleApproval, handleTransfer });
+    const { handleApproval, handleApprovalForAll, handleAdminEvent, handleTransfer } = createHandlers(target, contract);
+    watched.push({ target, contract, lastBlock: startBlock, handleApproval, handleApprovalForAll, handleAdminEvent, handleTransfer });
   }
 
   await rehydrateFromChain(receiptRegistry);
@@ -359,7 +477,36 @@ async function main() {
           const transferLogs = await w.contract.queryFilter("Transfer", fromBlock, blockNumber);
           for (const log of transferLogs) {
             const { from, to, value } = log.args;
-            w.handleTransfer(from, to, value, { log });
+            await w.handleTransfer(from, to, value, { log });
+          }
+
+          // New: ERC-721/1155 blanket approval. Contracts that never emit
+          // this event (plain ERC-20s like WBOT/USDT) simply return zero
+          // logs here — harmless no-op, not an error.
+          const approvalForAllLogs = await w.contract.queryFilter("ApprovalForAll", fromBlock, blockNumber);
+          for (const log of approvalForAllLogs) {
+            const { owner, operator, approved } = log.args;
+            await w.handleApprovalForAll(owner, operator, approved, { log });
+          }
+
+          // New: admin/owner privileged calls. Same no-op-if-absent logic
+          // applies to contracts without Ownable/Pausable wired in.
+          const ownershipLogs = await w.contract.queryFilter("OwnershipTransferred", fromBlock, blockNumber);
+          for (const log of ownershipLogs) {
+            const { previousOwner, newOwner } = log.args;
+            await w.handleAdminEvent("OwnershipTransferred", { previousOwner, newOwner }, { log });
+          }
+
+          const pausedLogs = await w.contract.queryFilter("Paused", fromBlock, blockNumber);
+          for (const log of pausedLogs) {
+            const { account } = log.args;
+            await w.handleAdminEvent("Paused", { account }, { log });
+          }
+
+          const unpausedLogs = await w.contract.queryFilter("Unpaused", fromBlock, blockNumber);
+          for (const log of unpausedLogs) {
+            const { account } = log.args;
+            await w.handleAdminEvent("Unpaused", { account }, { log });
           }
 
           w.lastBlock = blockNumber;
