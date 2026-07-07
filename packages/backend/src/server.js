@@ -1,4 +1,5 @@
 import express from "express";
+import { verifyOnChain } from "./chainVerify.js";
 import cors from "cors";
 import { getAlerts, getGuardians } from "./store.js";
 
