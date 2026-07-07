@@ -1,22 +1,54 @@
-// In-memory store shared between listener.js (writer) and server.js (reader).
-// Good enough for hackathon / single-process deployment.
+// In-memory store shared between listener.js (writer) and server.js (reader),
+// persisted to disk so history survives redeploys/restarts (requires a
+// Railway Volume mounted at /data — see project notes).
 
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { dirname } from "path";
+
+const DATA_PATH = process.env.STATE_PATH || "/data/shieldguard-state.json";
 const MAX_ALERTS = 200;
 
 const state = {
   alerts: [],
-  guardians: new Map(), // key: token name -> { name, address, scanned, flagged }
+  guardians: [],
 };
 
+function loadState() {
+  try {
+    if (existsSync(DATA_PATH)) {
+      const raw = JSON.parse(readFileSync(DATA_PATH, "utf-8"));
+      state.alerts = raw.alerts || [];
+      state.guardians = raw.guardians || [];
+      console.log(`[store] Loaded ${state.alerts.length} past alerts from disk.`);
+    } else {
+      console.log("[store] No persisted state found yet — starting fresh.");
+    }
+  } catch (err) {
+    console.error("[store] Could not load persisted state:", err.message);
+  }
+}
+
+function saveState() {
+  try {
+    mkdirSync(dirname(DATA_PATH), { recursive: true });
+    writeFileSync(DATA_PATH, JSON.stringify(state));
+  } catch (err) {
+    console.error("[store] Could not persist state (is the Volume mounted at /data?):", err.message);
+  }
+}
+
+loadState();
+
 export function registerGuardian(name, address) {
-  if (!state.guardians.has(name)) {
-    state.guardians.set(name, {
+  if (!state.guardians.find((g) => g.name === name)) {
+    state.guardians.push({
       id: name.toLowerCase(),
       name,
       address,
       scanned: 0,
       flagged: 0,
     });
+    saveState();
   }
 }
 
@@ -34,7 +66,7 @@ export function recordEvent({
   verdict,
   anchored,
 }) {
-  const g = state.guardians.get(token);
+  const g = state.guardians.find((g) => g.name === token);
   if (g) {
     g.scanned += 1;
     if (severity !== "LOW") g.flagged += 1;
@@ -58,6 +90,7 @@ export function recordEvent({
 
   state.alerts.unshift(entry);
   if (state.alerts.length > MAX_ALERTS) state.alerts.length = MAX_ALERTS;
+  saveState();
   return entry;
 }
 
@@ -66,5 +99,5 @@ export function getAlerts() {
 }
 
 export function getGuardians() {
-  return Array.from(state.guardians.values());
+  return state.guardians;
 }
