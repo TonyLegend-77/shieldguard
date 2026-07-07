@@ -1,4 +1,4 @@
-            'use client';
+'use client';
 
 import { useEffect, useState, useCallback } from 'react';
 import {
@@ -244,11 +244,25 @@ export default function Page() {
                             )}
 
                             {v?.data?.chain?.anchored && (
-                              <div className="bg-raised border border-nominal/30 rounded-sm px-3 py-2.5 space-y-1">
+                              <div className="bg-raised border border-nominal/30 rounded-sm px-3 py-2.5 space-y-1.5">
                                 <p className="text-nominal flex items-center gap-1.5">
                                   <BadgeCheck className="w-3 h-3" />
                                   CONFIRMED ON-CHAIN
                                 </p>
+                                {(() => {
+                                  let onChainMsg = null;
+                                  try {
+                                    const parsed = JSON.parse(v.data.chain.metadata);
+                                    onChainMsg = parsed.verdict || parsed.reason || null;
+                                  } catch {
+                                    onChainMsg = v.data.chain.metadata;
+                                  }
+                                  return onChainMsg ? (
+                                    <p className="text-ink font-sans normal-case leading-snug pb-1 border-b border-line">
+                                      {onChainMsg}
+                                    </p>
+                                  ) : null;
+                                })()}
                                 <p>SUBMITTER &nbsp; {short(v.data.chain.submitter)}</p>
                                 <p>
                                   TIMESTAMP &nbsp;
