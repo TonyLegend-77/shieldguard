@@ -20,10 +20,15 @@ export function startServer(port = process.env.PORT || 4000) {
     })
   );
 
-  app.get("/verify/:hash", (req, res) => {
+  app.get("/verify/:hash", async (req, res) => {
     const alert = getAlerts().find((a) => a.hash === req.params.hash);
-    if (!alert) return res.status(404).json({ error: "Not found" });
-    res.json(alert);
+    const chain = await verifyOnChain(req.params.hash);
+
+    if (!alert && !chain.anchored) {
+      return res.status(404).json({ error: "Not found in local history or on-chain." });
+    }
+
+    res.json({ alert: alert || null, chain });
   });
 
   app.get("/signature/address", (req, res) => {
