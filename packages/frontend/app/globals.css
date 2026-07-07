@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'IBM Plex Sans', sans-serif;
+  background-color: #0A0C0F;
+  color: #E7ECEF;
+  min-height: 100vh;
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(231, 236, 239, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(231, 236, 239, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.bg-vignette {
+  background: radial-gradient(ellipse at 50% -10%, rgba(53, 217, 180, 0.06), transparent 60%);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #14181C;
+}
+::-webkit-scrollbar-thumb {
+  background: #262C32;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4149;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
