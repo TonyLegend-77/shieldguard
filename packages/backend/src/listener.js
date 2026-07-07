@@ -220,28 +220,41 @@ async function main() {
     watched.push({ target, contract, lastBlock: startBlock, handleApproval, handleTransfer });
   }
 
+  // Guard against overlapping cycles: if a previous block's anchoring
+  // transaction is still confirming when the next block arrives, skip
+  // this tick rather than firing a second on-chain tx with the same
+  // nonce (which the network rejects as an underpriced replacement).
+  let processingBlock = false;
+
   provider.on("block", async (blockNumber) => {
-    for (const w of watched) {
-      const fromBlock = w.lastBlock + 1;
-      if (fromBlock > blockNumber) continue;
+    if (processingBlock) return;
+    processingBlock = true;
 
-      try {
-        const approvalLogs = await w.contract.queryFilter("Approval", fromBlock, blockNumber);
-        for (const log of approvalLogs) {
-          const { owner, spender, value } = log.args;
-          await w.handleApproval(owner, spender, value, { log });
+    try {
+      for (const w of watched) {
+        const fromBlock = w.lastBlock + 1;
+        if (fromBlock > blockNumber) continue;
+
+        try {
+          const approvalLogs = await w.contract.queryFilter("Approval", fromBlock, blockNumber);
+          for (const log of approvalLogs) {
+            const { owner, spender, value } = log.args;
+            await w.handleApproval(owner, spender, value, { log });
+          }
+
+          const transferLogs = await w.contract.queryFilter("Transfer", fromBlock, blockNumber);
+          for (const log of transferLogs) {
+            const { from, to, value } = log.args;
+            w.handleTransfer(from, to, value, { log });
+          }
+
+          w.lastBlock = blockNumber;
+        } catch (err) {
+          console.error(`[${w.target.name}] Poll error:`, err.message);
         }
-
-        const transferLogs = await w.contract.queryFilter("Transfer", fromBlock, blockNumber);
-        for (const log of transferLogs) {
-          const { from, to, value } = log.args;
-          w.handleTransfer(from, to, value, { log });
-        }
-
-        w.lastBlock = blockNumber;
-      } catch (err) {
-        console.error(`[${w.target.name}] Poll error:`, err.message);
       }
+    } finally {
+      processingBlock = false;
     }
   });
 
