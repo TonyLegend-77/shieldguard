@@ -424,7 +424,7 @@ async function main() {
   provider.pollingInterval = 4000;
 
   console.log(`ShieldGuard listener on chain ${process.env.CHAIN_ID || "unknown"}...`);
-  const app = startServer();
+  const app = startServer({ provider });
 
   receiptRegistry = await ensureReceiptRegistry();
 
