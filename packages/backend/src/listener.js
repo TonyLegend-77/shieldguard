@@ -1,10 +1,15 @@
 import "dotenv/config";
-import { JsonRpcProvider, Contract, Wallet } from "ethers";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import { JsonRpcProvider, Contract, ContractFactory, Wallet, formatEther } from "ethers";
 import { evaluateApproval } from "./ruleEngine.js";
 import { registerGuardian, recordEvent } from "./store.js";
 import { startServer } from "./server.js";
 import { generateVerdict } from "./policyEngine.js";
 import { SignatureService } from "./signatureService.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function short(addr) {
   return addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
@@ -26,33 +31,69 @@ if (process.env.SIGNER_PRIVATE_KEY) {
   signatureService = new SignatureService(process.env.SIGNER_PRIVATE_KEY);
 }
 
-let receiptRegistry = null;
-if (
-  process.env.RECEIPT_REGISTRY_ADDRESS &&
-  process.env.SIGNER_PRIVATE_KEY &&
-  process.env.RPC_URL
-) {
+let signer = null;
+if (process.env.SIGNER_PRIVATE_KEY && process.env.RPC_URL) {
   const provider = new JsonRpcProvider(process.env.RPC_URL);
-  const signer = new Wallet(process.env.SIGNER_PRIVATE_KEY, provider);
-  const REGISTRY_ABI = [
-    "function anchorReceipt(bytes32 contentHash, string calldata metadata) external",
-    "function verifyReceipt(bytes32 contentHash) external view returns (tuple(bytes32 contentHash, string metadata, uint256 timestamp, address submitter))",
-    "function isAnchored(bytes32 contentHash) external view returns (bool)",
-    "event ReceiptAnchored(bytes32 indexed contentHash, uint256 timestamp, string metadata, address submitter)",
-  ];
-  receiptRegistry = new Contract(
-    process.env.RECEIPT_REGISTRY_ADDRESS,
-    REGISTRY_ABI,
-    signer
+  signer = new Wallet(process.env.SIGNER_PRIVATE_KEY, provider);
+  console.log("[listener] Signer address:", signer.address);
+}
+
+async function ensureReceiptRegistry() {
+  if (!signer) {
+    console.log("[listener] ReceiptRegistry disabled — set SIGNER_PRIVATE_KEY and RPC_URL to enable.");
+    return null;
+  }
+
+  const artifactPath = join(
+    __dirname,
+    "..",
+    "artifacts",
+    "contracts",
+    "ReceiptRegistry.sol",
+    "ReceiptRegistry.json"
   );
-  console.log("[listener] ReceiptRegistry connected:", process.env.RECEIPT_REGISTRY_ADDRESS);
-} else {
-  console.log("[listener] ReceiptRegistry not configured — anchoring disabled.");
+
+  let artifact;
+  try {
+    artifact = JSON.parse(readFileSync(artifactPath, "utf-8"));
+  } catch (err) {
+    console.error("[listener] Could not load ReceiptRegistry artifact — did the build run 'hardhat compile'?", err.message);
+    return null;
+  }
+
+  if (process.env.RECEIPT_REGISTRY_ADDRESS) {
+    console.log("[listener] Using existing ReceiptRegistry:", process.env.RECEIPT_REGISTRY_ADDRESS);
+    return new Contract(process.env.RECEIPT_REGISTRY_ADDRESS, artifact.abi, signer);
+  }
+
+  console.log("[deploy] No RECEIPT_REGISTRY_ADDRESS set — deploying a new ReceiptRegistry...");
+  const balance = await signer.provider.getBalance(signer.address);
+  console.log("[deploy] Deployer:", signer.address, "| Balance:", formatEther(balance), "BOT");
+
+  if (balance === 0n) {
+    console.error("[deploy] Deployer wallet has 0 balance. Send testnet BOT to", signer.address, "then redeploy.");
+    return null;
+  }
+
+  try {
+    const factory = new ContractFactory(artifact.abi, artifact.bytecode, signer);
+    const contract = await factory.deploy();
+    await contract.waitForDeployment();
+    const address = await contract.getAddress();
+
+    console.log("[deploy] ✅ ReceiptRegistry deployed to:", address);
+    console.log("[deploy] Add RECEIPT_REGISTRY_ADDRESS=" + address + " to Railway variables, then redeploy.");
+
+    return contract;
+  } catch (err) {
+    console.error("[deploy] Failed:", err.message);
+    return null;
+  }
 }
 
 async function main() {
   if (!process.env.RPC_URL) {
-    console.error("Set RPC_URL in .env. Confirmed testnet: https://rpc.bohr.life");
+    console.error("Set RPC_URL in Railway variables. Confirmed testnet: https://rpc.bohr.life");
     process.exit(1);
   }
 
@@ -62,12 +103,14 @@ async function main() {
   console.log(`ShieldGuard listener on chain ${process.env.CHAIN_ID || "unknown"}...`);
   startServer();
 
+  const receiptRegistry = await ensureReceiptRegistry();
+
   const watched = [];
   const startBlock = await provider.getBlockNumber();
 
   for (const target of TARGETS) {
     if (!target.address) {
-      console.warn(`Skipping ${target.name}: no address in .env`);
+      console.warn(`Skipping ${target.name}: no address in Railway variables`);
       continue;
     }
 
@@ -177,8 +220,6 @@ async function main() {
     watched.push({ target, contract, lastBlock: startBlock, handleApproval, handleTransfer });
   }
 
-  // Poll for logs per block range instead of using eth_newFilter/eth_getFilterChanges,
-  // since some RPC endpoints (load-balanced or short-lived) drop server-side filters.
   provider.on("block", async (blockNumber) => {
     for (const w of watched) {
       const fromBlock = w.lastBlock + 1;
