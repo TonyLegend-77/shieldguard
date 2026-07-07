@@ -48,15 +48,17 @@ function templateVerdict(record) {
 }
 
 // Primary provider for mainnet: fast + free-tier friendly. Falls back to
-// OpenAI, then Anthropic, then the local template if it errors or isn't configured.
-async function geminiVerdict(record) {
-  const ctx = getContext(record.matched_rules);
+// a secondary Gemini model, then OpenAI, then Anthropic, then the local
+// template if all of those error or aren't configured.
+
+// Tries a single Gemini model with 503 backoff retries. Throws on final failure.
+async function callGeminiModel(model, record, ctx, maxRetries = 2) {
   const prompt = `You are ShieldGuard, a blockchain security analyst. Analyze the flagged approval and return ONLY a JSON object (no markdown fences, no prose) with keys: summary (1 sentence), recommendation (REVOKE_IMMEDIATELY, REVIEW_AND_REVOKE, or MONITOR), confidence (0.0-1.0), explanation (2 sentences max).
 
 Flagged record: ${JSON.stringify(record)}
 Relevant patterns: ${JSON.stringify(ctx.map((c) => ({ id: c.id, reasoning: c.reasoning })))}`;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
@@ -64,9 +66,7 @@ Relevant patterns: ${JSON.stringify(ctx.map((c) => ({ id: c.id, reasoning: c.rea
 
   // Gemini's free-tier Flash models occasionally return 503 UNAVAILABLE under
   // load spikes — this is transient, not a config/quota problem, so a couple
-  // of short backoff retries recover most of these before we give up and
-  // fall through to OpenAI/Anthropic/template.
-  const maxRetries = 2;
+  // of short backoff retries recover most of these before we give up.
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, {
@@ -78,18 +78,18 @@ Relevant patterns: ${JSON.stringify(ctx.map((c) => ({ id: c.id, reasoning: c.rea
     if (res.ok) {
       const data = await res.json();
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error("Empty Gemini response");
+      if (!text) throw new Error(`Empty Gemini response (${model})`);
       // Gemini sometimes wraps output in markdown fences even with JSON mode set.
       const cleanText = text.replace(/^```json\s*|\s*```$/g, "").trim();
       return JSON.parse(cleanText);
     }
 
     const errText = await res.text();
-    lastErr = new Error(`Gemini API returned ${res.status}: ${errText}`);
+    lastErr = new Error(`Gemini API (${model}) returned ${res.status}: ${errText}`);
 
     if (res.status === 503 && attempt < maxRetries) {
       const waitMs = 500 * 2 ** attempt + Math.random() * 250;
-      console.warn(`[policyEngine] Gemini 503, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries})`);
+      console.warn(`[policyEngine] Gemini ${model} 503, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries})`);
       await new Promise((r) => setTimeout(r, waitMs));
       continue;
     }
@@ -98,6 +98,20 @@ Relevant patterns: ${JSON.stringify(ctx.map((c) => ({ id: c.id, reasoning: c.rea
   }
 
   throw lastErr;
+}
+
+// Tries gemini-3.5-flash first (primary, exhausts its own retries), then
+// falls back to gemini-2.5-flash as a secondary model before this whole
+// function throws and control passes to OpenAI/Anthropic/template.
+async function geminiVerdict(record) {
+  const ctx = getContext(record.matched_rules);
+
+  try {
+    return await callGeminiModel("gemini-3.5-flash", record, ctx);
+  } catch (err) {
+    console.warn("[policyEngine] gemini-3.5-flash exhausted, trying gemini-2.5-flash:", err.message);
+    return await callGeminiModel("gemini-2.5-flash", record, ctx);
+  }
 }
 
 async function openAIVerdict(record) {
