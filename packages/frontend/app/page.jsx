@@ -1,445 +1,251 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Shield,
-  Activity,
+  Radio,
   ChevronDown,
-  ExternalLink,
-  Fingerprint,
-  Copy,
-  Check,
-  Anchor,
-  BrainCircuit,
+  PenLine,
+  Link2,
+  AlertTriangle,
+  WifiOff,
 } from 'lucide-react';
 
-const displayFont = { fontFamily: "'Oswald', sans-serif" };
-const monoFont = { fontFamily: "'IBM Plex Mono', monospace" };
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
-const DEMO_GUARDIANS = [
-  { id: 'wbot', name: 'WBOT', address: '0xD545...F4abd30', status: 'ACTIVE', scanned: 58, flagged: 3 },
-  { id: 'usdt', name: 'USDT (testnet)', address: '0x75ed...10420fe3', status: 'ACTIVE', scanned: 41, flagged: 2 },
-];
-
-const SEVERITY_STYLE = {
-  LOW: { bar: 'bg-stone-600', text: 'text-stone-400', label: 'CLEARED', badge: 'border-stone-700 text-stone-500' },
-  MEDIUM: { bar: 'bg-amber-500', text: 'text-amber-400', label: 'MEDIUM', badge: 'border-amber-700/50 text-amber-500' },
-  HIGH: { bar: 'bg-orange-600', text: 'text-orange-500', label: 'HIGH', badge: 'border-orange-700/50 text-orange-500' },
-  CRITICAL: { bar: 'bg-red-600', text: 'text-red-500', label: 'CRITICAL', badge: 'border-red-700/50 text-red-500' },
+const SEVERITY = {
+  LOW: { label: 'NOMINAL', text: 'text-nominal', border: 'border-nominal', dot: 'bg-nominal' },
+  MEDIUM: { label: 'ELEVATED', text: 'text-info', border: 'border-info', dot: 'bg-info' },
+  HIGH: { label: 'HIGH', text: 'text-caution', border: 'border-caution', dot: 'bg-caution' },
+  CRITICAL: { label: 'CRITICAL', text: 'text-critical', border: 'border-critical', dot: 'bg-critical' },
 };
 
-const DEMO_ENTRIES = [
-  {
-    id: 'demo-1',
-    token: 'WBOT',
-    from: '0x7a3f...e2b1',
-    to: '0x4c9d...19af',
-    severity: 'CRITICAL',
-    reason: 'Unlimited approval granted to a contract deployed 4 hours ago',
-    rules: ['P002', 'P004', 'G002'],
-    time: new Date(Date.now() - 2 * 60000).toISOString(),
-    signed: true,
-    hash: '0x9e21f7a8b3c04a2d5e6f8190c1d4a7b3e2f5c8d9a0b4e7f1c3d6a9b2e5f8c1d4',
-    verdict: 'CRITICAL: This WBOT approval grants unlimited spending power. Immediate revocation is strongly recommended.',
-    anchored: true,
-    txHash: '0xabc123...',
-  },
-  {
-    id: 'demo-2',
-    token: 'USDT',
-    from: '0x91cc...d02e',
-    to: '0x5463...84E19',
-    severity: 'LOW',
-    reason: 'Standard approval, well within normal range',
-    rules: [],
-    time: new Date(Date.now() - 6 * 60000).toISOString(),
-    signed: false,
-    hash: null,
-    verdict: null,
-    anchored: false,
-    txHash: null,
-  },
-  {
-    id: 'demo-3',
-    token: 'WBOT',
-    from: '0x2b5a...771c',
-    to: '0x88ff...20cd',
-    severity: 'HIGH',
-    reason: 'Approval amount is 40x this wallet\'s own token balance',
-    rules: ['P001'],
-    time: new Date(Date.now() - 11 * 60000).toISOString(),
-    signed: true,
-    hash: '0x114ab2c3d4e5f6789012345678901234567890abcdef1234567890abcdef1234',
-    verdict: 'HIGH RISK: Approval amount is 40x this wallet\'s own token balance on WBOT. Review this approval before proceeding with any further transactions.',
-    anchored: false,
-    txHash: '0xdef456...',
-  },
-];
+function short(addr) {
+  if (!addr) return '—';
+  if (addr.length <= 12) return addr;
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
 
 function timeAgo(iso) {
-  if (!iso) return '—';
-  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
-function GuardianCard({ g }) {
-  return (
-    <div className="border border-stone-800 bg-stone-900/60 rounded-sm p-3 hover:border-stone-700 transition-colors">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm tracking-wide uppercase" style={displayFont}>{g.name}</span>
-        <span className="flex items-center gap-1 text-[10px] text-emerald-500 uppercase tracking-widest">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-          {g.status}
-        </span>
-      </div>
-      <div className="text-xs text-stone-500 truncate mb-2" style={monoFont}>{g.address}</div>
-      <div className="flex items-center justify-between text-xs text-stone-400" style={monoFont}>
-        <span>{g.scanned} scanned</span>
-        <span className={g.flagged > 0 ? 'text-orange-500 font-medium' : 'text-stone-500'}>
-          {g.flagged} flagged
-        </span>
-      </div>
-    </div>
-  );
-}
+export default function Page() {
+  const [health, setHealth] = useState(null);
+  const [guardians, setGuardians] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [online, setOnline] = useState(false);
+  const [expanded, setExpanded] = useState(null);
 
-function ManifestEntry({ entry, expanded, onToggle }) {
-  const [copied, setCopied] = useState(false);
-  const sev = SEVERITY_STYLE[entry.severity] || SEVERITY_STYLE.LOW;
-
-  const handleCopy = async (e) => {
-    e.stopPropagation();
-    if (!entry.hash) return;
+  const poll = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(entry.hash);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {}
-  };
-
-  const explorerUrl = entry.txHash
-    ? `https://scan.bohr.life/tx/${entry.txHash}`
-    : 'https://scan.bohr.life';
-
-  return (
-    <div className="border border-stone-800 bg-stone-900/40 rounded-sm overflow-hidden hover:border-stone-700 transition-colors">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-stone-900/80 transition-colors"
-      >
-        <span className={`h-8 w-1.5 rounded-full shrink-0 ${sev.bar}`} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-            <span className="text-[10px] uppercase tracking-widest font-medium" style={displayFont}>
-              {entry.token}
-            </span>
-            <span className={`text-[10px] uppercase tracking-widest ${sev.text}`}>
-              {sev.label}
-            </span>
-            {entry.signed && entry.hash && (
-              <span className="inline-flex items-center gap-1 -rotate-6 border border-orange-600/70 text-orange-500 text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm shrink-0">
-                <Fingerprint size={9} /> Signed
-              </span>
-            )}
-            {entry.anchored && (
-              <span className="inline-flex items-center gap-1 border border-emerald-700/50 text-emerald-500 text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm shrink-0">
-                <Anchor size={9} /> On-chain
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-stone-300 truncate">{entry.reason}</p>
-        </div>
-        <div className="text-right shrink-0 pl-2">
-          <div className="text-xs text-stone-500" style={monoFont}>{timeAgo(entry.time)}</div>
-          <ChevronDown
-            size={14}
-            className={`ml-auto mt-1 text-stone-600 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
-          />
-        </div>
-      </button>
-
-      {expanded && (
-        <div className="px-3 pb-3 pt-1 border-t border-stone-800 space-y-2.5">
-          <div className="flex items-center justify-between text-xs" style={monoFont}>
-            <span className="text-stone-500">
-              {entry.from} → {entry.to}
-            </span>
-          </div>
-
-          {entry.rules.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {entry.rules.map((r) => (
-                <span
-                  key={r}
-                  className="text-[10px] border border-stone-700 text-stone-400 px-1.5 py-0.5 rounded-sm"
-                  style={monoFont}
-                >
-                  {r}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {entry.verdict && (
-            <div className="bg-stone-950 border border-stone-800 rounded-sm px-2.5 py-2.5">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <BrainCircuit size={10} className="text-orange-500" />
-                <span className="text-[10px] text-orange-500 uppercase tracking-widest">AI Verdict</span>
-              </div>
-              <p className="text-xs text-stone-300 leading-relaxed">{entry.verdict}</p>
-              {entry.anchored && (
-                <div className="flex items-center gap-1 mt-1.5">
-                  <Anchor size={9} className="text-emerald-500" />
-                  <span className="text-[10px] text-emerald-500">Anchored on-chain via ReceiptRegistry</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {entry.signed && entry.hash ? (
-            <div className="flex items-center justify-between bg-stone-950 border border-stone-800 rounded-sm px-2.5 py-2">
-              <div className="min-w-0 flex-1">
-                <div className="text-[10px] text-stone-500 uppercase tracking-widest mb-0.5">
-                  Receipt hash
-                </div>
-                <div className="text-xs text-stone-300 truncate" style={monoFont}>
-                  {entry.hash}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 pl-3">
-                <button
-                  onClick={handleCopy}
-                  className="text-stone-500 hover:text-stone-300 transition-colors"
-                  title="Copy hash"
-                >
-                  {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                </button>
-                <a
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1 text-[11px] text-orange-500 hover:text-orange-400 uppercase tracking-wide transition-colors"
-                >
-                  Verify <ExternalLink size={11} />
-                </a>
-              </div>
-            </div>
-          ) : (
-            <p className="text-[11px] text-stone-600 italic">
-              Not signed — below the anchoring threshold, logged for reference only.
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function ShieldGuardDashboard() {
-  const [expandedId, setExpandedId] = useState(null);
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const [entries, setEntries] = useState(DEMO_ENTRIES);
-  const [guardians, setGuardians] = useState(DEMO_GUARDIANS);
-  const [isLive, setIsLive] = useState(false);
-  const [apiStatus, setApiStatus] = useState('connecting');
-  const [signerAddress, setSignerAddress] = useState(null);
-
-  const apiUrl = typeof window !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000')
-    : 'http://localhost:4000';
+      const [h, g, a] = await Promise.all([
+        fetch(`${API}/health`).then((r) => r.json()),
+        fetch(`${API}/guardians`).then((r) => r.json()),
+        fetch(`${API}/alerts`).then((r) => r.json()),
+      ]);
+      setHealth(h);
+      setGuardians(g);
+      setAlerts(a);
+      setOnline(true);
+    } catch {
+      setOnline(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.matchMedia) {
-      setReduceMotion(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-    }
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, [poll]);
 
-    const fetchData = async () => {
-      try {
-        const [alertsRes, guardiansRes, healthRes] = await Promise.all([
-          fetch(`${apiUrl}/alerts`),
-          fetch(`${apiUrl}/guardians`),
-          fetch(`${apiUrl}/health`),
-        ]);
-
-        if (alertsRes.ok && guardiansRes.ok) {
-          const alerts = await alertsRes.json();
-          const gData = await guardiansRes.json();
-          const health = healthRes.ok ? await healthRes.json() : {};
-
-          if (gData.length > 0) {
-            setGuardians(gData);
-            setEntries(alerts.length > 0 ? alerts : DEMO_ENTRIES);
-            setIsLive(true);
-            setApiStatus('connected');
-          } else {
-            setApiStatus('waiting');
-          }
-
-          if (health.signerAddress) {
-            setSignerAddress(health.signerAddress);
-          }
-        } else {
-          setApiStatus('error');
-        }
-      } catch (err) {
-        console.error('Fetch failed:', err);
-        setApiStatus('offline');
-        setIsLive(false);
-      }
-    };
-
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, [apiUrl]);
-
-  const flaggedCount = useMemo(() => entries.filter((e) => e.severity !== 'LOW').length, [entries]);
-  const signedCount = useMemo(() => entries.filter((e) => e.signed).length, [entries]);
-  const anchoredCount = useMemo(() => entries.filter((e) => e.anchored).length, [entries]);
-
-  const statusColor = {
-    connected: 'text-emerald-500',
-    waiting: 'text-amber-500',
-    error: 'text-red-500',
-    offline: 'text-stone-500',
-    connecting: 'text-stone-500',
-  }[apiStatus];
+  const flagged = alerts.filter((a) => a.severity !== 'LOW').length;
+  const signed = alerts.filter((a) => a.signed).length;
+  const anchored = alerts.filter((a) => a.anchored).length;
 
   return (
-    <div
-      className="h-screen w-full flex flex-col bg-stone-950 text-stone-200 overflow-hidden"
-      style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}
-    >
-      {/* Header */}
-      <header className="shrink-0 border-b border-stone-800 bg-stone-900 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-sm border border-orange-600/60 flex items-center justify-center shrink-0">
-            <Shield size={16} className="text-orange-500" />
-          </div>
-          <div>
-            <div className="text-lg leading-none tracking-wide uppercase" style={displayFont}>
-              ShieldGuard
-            </div>
-            <div className="text-[10px] text-stone-500 tracking-widest" style={monoFont}>
-              UNIT SG-1 · RECORDER ONLINE
+    <main className="min-h-screen bg-grid bg-vignette">
+      <div className="max-w-6xl mx-auto px-5 py-8 md:py-12">
+
+        {/* HUD header */}
+        <header className="flex items-center justify-between border-b border-line pb-5 mb-8 animate-fadeUp">
+          <div className="flex items-center gap-3">
+            <Shield className="w-6 h-6 text-nominal shrink-0" strokeWidth={1.5} />
+            <div>
+              <h1 className="font-display text-sm md:text-base tracking-[0.15em] text-ink">
+                SHIELDGUARD
+              </h1>
+              <p className="font-mono text-[11px] text-dim tracking-wide mt-0.5">
+                UNIT SG-1 · BOT CHAIN · TESTNET 968
+              </p>
             </div>
           </div>
+          <div className="flex items-center gap-2 font-mono text-[11px] tracking-wide">
+            {online ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-nominal animate-pulseDot" />
+                <span className="text-nominal">LIVE</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-3.5 h-3.5 text-critical" />
+                <span className="text-critical">OFFLINE</span>
+              </>
+            )}
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-5">
+
+          {/* Guardians panel */}
+          <section
+            className="border border-line bg-panel rounded-sm overflow-hidden animate-fadeUp"
+            style={{ animationDelay: '80ms' }}
+          >
+            <div className="relative overflow-hidden border-b border-line px-4 py-3">
+              <div className="absolute inset-0 -z-0 overflow-hidden opacity-40">
+                <div className="absolute top-0 bottom-0 w-24 bg-gradient-to-r from-transparent via-nominal/20 to-transparent animate-sweep" />
+              </div>
+              <h2 className="relative font-display text-[11px] tracking-[0.15em] text-dim">
+                GUARDIANS
+              </h2>
+            </div>
+
+            <div className="divide-y divide-line">
+              {guardians.length === 0 && (
+                <p className="font-mono text-xs text-faint px-4 py-6">
+                  {online ? 'No contracts registered yet.' : 'Awaiting connection to sentinel.'}
+                </p>
+              )}
+              {guardians.map((g) => (
+                <div key={g.id} className="px-4 py-4">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-mono text-sm font-medium text-ink">{g.name}</span>
+                    <span className="flex items-center gap-1.5 text-[10px] font-mono text-nominal">
+                      <Radio className="w-3 h-3 animate-pulseDot" />
+                      SCANNING
+                    </span>
+                  </div>
+                  <p className="font-mono text-[11px] text-dim break-all mb-2">
+                    {short(g.address)}
+                  </p>
+                  <div className="flex gap-4 font-mono text-[11px]">
+                    <span className="text-dim">
+                      SCANNED <span className="text-ink">{g.scanned}</span>
+                    </span>
+                    <span className="text-dim">
+                      FLAGGED{' '}
+                      <span className={g.flagged > 0 ? 'text-caution' : 'text-ink'}>
+                        {g.flagged}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Manifest panel */}
+          <section
+            className="border border-line bg-panel rounded-sm overflow-hidden animate-fadeUp"
+            style={{ animationDelay: '160ms' }}
+          >
+            <div className="border-b border-line px-4 py-3">
+              <h2 className="font-display text-[11px] tracking-[0.15em] text-dim">
+                MANIFEST — LIVE ACTIVITY
+              </h2>
+            </div>
+
+            <div className="divide-y divide-line max-h-[560px] overflow-y-auto">
+              {alerts.length === 0 && (
+                <div className="px-5 py-10 text-center">
+                  <p className="font-mono text-xs text-faint">
+                    AWAITING FIRST SIGNAL — no events logged yet.
+                  </p>
+                </div>
+              )}
+
+              {alerts.map((a) => {
+                const sev = SEVERITY[a.severity] || SEVERITY.LOW;
+                const isOpen = expanded === a.id;
+                return (
+                  <div key={a.id} className={`border-l-2 ${sev.border} pl-4 pr-4 py-3.5`}>
+                    <button
+                      onClick={() => setExpanded(isOpen ? null : a.id)}
+                      className="w-full flex items-start justify-between gap-3 text-left"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className={`font-mono text-[10px] tracking-wide ${sev.text}`}>
+                            [{sev.label}]
+                          </span>
+                          <span className="font-mono text-xs text-ink">{a.token}</span>
+                          {a.signed && <PenLine className="w-3 h-3 text-dim" />}
+                          {a.anchored && <Link2 className="w-3 h-3 text-nominal" />}
+                        </div>
+                        <p className="font-sans text-[13px] text-dim leading-snug">
+                          {a.reason}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                        <span className="font-mono text-[10px] text-faint whitespace-nowrap">
+                          {timeAgo(a.time)}
+                        </span>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 text-faint transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                        />
+                      </div>
+                    </button>
+
+                    {isOpen && (
+                      <div className="mt-3 pt-3 border-t border-line font-mono text-[11px] text-dim space-y-1.5">
+                        <p>FROM &nbsp; {short(a.from)}</p>
+                        <p>TO &nbsp;&nbsp;&nbsp; {short(a.to)}</p>
+                        {a.rules?.length > 0 && <p>RULES &nbsp; {a.rules.join(', ')}</p>}
+                        {a.verdict && <p className="text-ink">{a.verdict}</p>}
+                        {a.hash && <p className="break-all">HASH &nbsp; {a.hash}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="hidden sm:inline text-[10px] text-stone-500 tracking-widest" style={monoFont}>
-            BOT CHAIN · TESTNET 968
-          </span>
-          <span className={`flex items-center gap-1.5 text-[11px] uppercase tracking-widest ${statusColor}`}>
-            <Activity size={12} className={reduceMotion ? '' : 'animate-pulse'} />
-            {apiStatus === 'connected' ? 'LIVE' : apiStatus}
-          </span>
-        </div>
-      </header>
-
-      {/* Main */}
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        {/* Sidebar — Guardians + Stats */}
-        <section className="md:w-64 shrink-0 border-b md:border-b-0 md:border-r border-stone-800 p-3 space-y-3 overflow-y-auto">
-          <div className="text-[10px] text-stone-500 uppercase tracking-widest px-1" style={monoFont}>
-            Guardians
-          </div>
-          {guardians.map((g) => (
-            <GuardianCard key={g.id} g={g} />
-          ))}
-
-          <div className="border-t border-stone-800 pt-3 space-y-2">
-            <div className="text-[10px] text-stone-500 uppercase tracking-widest px-1" style={monoFont}>
-              Session Stats
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="border border-stone-800 bg-stone-900/40 rounded-sm p-2 text-center">
-                <div className="text-lg text-orange-500" style={displayFont}>{flaggedCount}</div>
-                <div className="text-[10px] text-stone-500 uppercase tracking-wider" style={monoFont}>Flagged</div>
-              </div>
-              <div className="border border-stone-800 bg-stone-900/40 rounded-sm p-2 text-center">
-                <div className="text-lg text-orange-500" style={displayFont}>{signedCount}</div>
-                <div className="text-[10px] text-stone-500 uppercase tracking-wider" style={monoFont}>Signed</div>
-              </div>
-              <div className="border border-stone-800 bg-stone-900/40 rounded-sm p-2 text-center">
-                <div className="text-lg text-emerald-500" style={displayFont}>{anchoredCount}</div>
-                <div className="text-[10px] text-stone-500 uppercase tracking-wider" style={monoFont}>Anchored</div>
-              </div>
-              <div className="border border-stone-800 bg-stone-900/40 rounded-sm p-2 text-center">
-                <div className="text-lg text-stone-400" style={displayFont}>{entries.length}</div>
-                <div className="text-[10px] text-stone-500 uppercase tracking-wider" style={monoFont}>Total</div>
-              </div>
-            </div>
-          </div>
-
-          {signerAddress && (
-            <div className="border-t border-stone-800 pt-2">
-              <div className="text-[10px] text-stone-500 uppercase tracking-widest px-1 mb-1" style={monoFont}>
-                Signer
-              </div>
-              <div className="text-[10px] text-stone-600 truncate" style={monoFont}>
-                {signerAddress}
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Manifest */}
-        <section className="flex-1 overflow-y-auto p-3 space-y-2">
-          <div className="flex items-center justify-between px-1 mb-1">
-            <span className="text-[10px] text-stone-500 uppercase tracking-widest" style={monoFont}>
-              Manifest — recent activity
-            </span>
-            <span className="text-[10px] text-orange-500 uppercase tracking-widest" style={monoFont}>
-              {flaggedCount} flagged
-            </span>
-          </div>
-
-          {entries.map((entry) => (
-            <ManifestEntry
-              key={entry.id}
-              entry={entry}
-              expanded={expandedId === entry.id}
-              onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-            />
-          ))}
-
-          {isLive && entries.length === 0 && (
-            <div className="text-center py-12">
-              <Activity size={24} className="text-stone-700 mx-auto mb-3" />
-              <p className="text-xs text-stone-600">No events yet. Waiting for on-chain activity...</p>
-            </div>
-          )}
-
-          {!isLive && (
-            <div className="text-center py-8 border border-dashed border-stone-800 rounded-sm">
-              <p className="text-xs text-stone-600 mb-1">Backend not connected</p>
-              <p className="text-[10px] text-stone-700">Polling {apiUrl} every 5s...</p>
-            </div>
-          )}
-        </section>
-      </main>
-
-      {/* Footer */}
-      <footer className="shrink-0 border-t border-stone-800 bg-stone-900 px-4 py-1.5 flex items-center justify-between">
-        <span className="text-[10px] text-stone-600 tracking-wide" style={monoFont}>
-          33 threat patterns · rule engine v1 · policy engine v1
-        </span>
-        <span
-          className={`text-[10px] border px-1.5 py-0.5 rounded-sm tracking-widest transition-colors ${
-            isLive
-              ? 'text-emerald-500 border-emerald-600/50'
-              : 'text-amber-600 border-amber-700/50'
-          }`}
+        {/* Telemetry strip */}
+        <footer
+          className="mt-5 border border-line bg-panel rounded-sm px-5 py-4 flex flex-wrap items-center gap-x-8 gap-y-3 animate-fadeUp"
+          style={{ animationDelay: '220ms' }}
         >
-          {isLive ? 'LIVE DATA' : 'PREVIEW DATA'}
-        </span>
-      </footer>
+          <Stat label="FLAGGED" value={flagged} accent={flagged > 0 ? 'text-caution' : 'text-ink'} />
+          <Stat label="SIGNED" value={signed} />
+          <Stat label="ANCHORED" value={anchored} accent="text-nominal" />
+          <Stat label="TOTAL" value={alerts.length} />
+          <div className="ml-auto font-mono text-[11px] text-faint">
+            SIGNER &nbsp;{short(health?.signerAddress)}
+          </div>
+        </footer>
+
+        <p className="mt-4 font-mono text-[10px] text-faint text-center">
+          33 threat patterns · rule engine v1 · policy engine v1
+        </p>
+      </div>
+    </main>
+  );
+}
+
+function Stat({ label, value, accent = 'text-ink' }) {
+  return (
+    <div>
+      <p className="font-mono text-[10px] text-faint tracking-wide mb-0.5">{label}</p>
+      <p className={`font-mono text-lg font-medium ${accent}`}>{value}</p>
     </div>
   );
 }
