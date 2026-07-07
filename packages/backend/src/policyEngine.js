@@ -56,28 +56,48 @@ async function geminiVerdict(record) {
 Flagged record: ${JSON.stringify(record)}
 Relevant patterns: ${JSON.stringify(ctx.map((c) => ({ id: c.id, reasoning: c.reasoning })))}`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-    {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
+  });
+
+  // Gemini's free-tier Flash models occasionally return 503 UNAVAILABLE under
+  // load spikes — this is transient, not a config/quota problem, so a couple
+  // of short backoff retries recover most of these before we give up and
+  // fall through to OpenAI/Anthropic/template.
+  const maxRetries = 2;
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
-      }),
-    }
-  );
+      body,
+    });
 
-  if (!res.ok) {
-    throw new Error(`Gemini API returned ${res.status}: ${await res.text()}`);
+    if (res.ok) {
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error("Empty Gemini response");
+      // Gemini sometimes wraps output in markdown fences even with JSON mode set.
+      const cleanText = text.replace(/^```json\s*|\s*```$/g, "").trim();
+      return JSON.parse(cleanText);
+    }
+
+    const errText = await res.text();
+    lastErr = new Error(`Gemini API returned ${res.status}: ${errText}`);
+
+    if (res.status === 503 && attempt < maxRetries) {
+      const waitMs = 500 * 2 ** attempt + Math.random() * 250;
+      console.warn(`[policyEngine] Gemini 503, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise((r) => setTimeout(r, waitMs));
+      continue;
+    }
+
+    throw lastErr;
   }
 
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty Gemini response");
-  // Gemini sometimes wraps output in markdown fences even with JSON mode set.
-  const cleanText = text.replace(/^```json\s*|\s*```$/g, "").trim();
-  return JSON.parse(cleanText);
+  throw lastErr;
 }
 
 async function openAIVerdict(record) {
