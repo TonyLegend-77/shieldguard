@@ -75,7 +75,9 @@ Relevant patterns: ${JSON.stringify(ctx.map((c) => ({ id: c.id, reasoning: c.rea
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Empty Gemini response");
-  return JSON.parse(text);
+  // Gemini sometimes wraps output in markdown fences even with JSON mode set.
+  const cleanText = text.replace(/^```json\s*|\s*```$/g, "").trim();
+  return JSON.parse(cleanText);
 }
 
 async function openAIVerdict(record) {
