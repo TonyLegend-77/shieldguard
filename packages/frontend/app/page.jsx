@@ -1,4 +1,4 @@
-'use client';
+            'use client';
 
 import { useEffect, useState, useCallback } from 'react';
 import {
@@ -7,17 +7,19 @@ import {
   ChevronDown,
   PenLine,
   Link2,
-  AlertTriangle,
   WifiOff,
+  ExternalLink,
+  Loader2,
+  BadgeCheck,
 } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 const SEVERITY = {
-  LOW: { label: 'NOMINAL', text: 'text-nominal', border: 'border-nominal', dot: 'bg-nominal' },
-  MEDIUM: { label: 'ELEVATED', text: 'text-info', border: 'border-info', dot: 'bg-info' },
-  HIGH: { label: 'HIGH', text: 'text-caution', border: 'border-caution', dot: 'bg-caution' },
-  CRITICAL: { label: 'CRITICAL', text: 'text-critical', border: 'border-critical', dot: 'bg-critical' },
+  LOW: { label: 'NOMINAL', text: 'text-nominal', border: 'border-nominal' },
+  MEDIUM: { label: 'ELEVATED', text: 'text-info', border: 'border-info' },
+  HIGH: { label: 'HIGH', text: 'text-caution', border: 'border-caution' },
+  CRITICAL: { label: 'CRITICAL', text: 'text-critical', border: 'border-critical' },
 };
 
 function short(addr) {
@@ -42,6 +44,7 @@ export default function Page() {
   const [alerts, setAlerts] = useState([]);
   const [online, setOnline] = useState(false);
   const [expanded, setExpanded] = useState(null);
+  const [verifyState, setVerifyState] = useState({}); // hash -> { loading, data, error }
 
   const poll = useCallback(async () => {
     try {
@@ -65,6 +68,17 @@ export default function Page() {
     return () => clearInterval(id);
   }, [poll]);
 
+  const runVerify = async (hash) => {
+    setVerifyState((s) => ({ ...s, [hash]: { loading: true } }));
+    try {
+      const res = await fetch(`${API}/verify/${hash}`);
+      const data = await res.json();
+      setVerifyState((s) => ({ ...s, [hash]: { loading: false, data } }));
+    } catch (err) {
+      setVerifyState((s) => ({ ...s, [hash]: { loading: false, error: err.message } }));
+    }
+  };
+
   const flagged = alerts.filter((a) => a.severity !== 'LOW').length;
   const signed = alerts.filter((a) => a.signed).length;
   const anchored = alerts.filter((a) => a.anchored).length;
@@ -73,7 +87,6 @@ export default function Page() {
     <main className="min-h-screen bg-grid bg-vignette">
       <div className="max-w-6xl mx-auto px-5 py-8 md:py-12">
 
-        {/* HUD header */}
         <header className="flex items-center justify-between border-b border-line pb-5 mb-8 animate-fadeUp">
           <div className="flex items-center gap-3">
             <Shield className="w-6 h-6 text-nominal shrink-0" strokeWidth={1.5} />
@@ -103,7 +116,6 @@ export default function Page() {
 
         <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-5">
 
-          {/* Guardians panel */}
           <section
             className="border border-line bg-panel rounded-sm overflow-hidden animate-fadeUp"
             style={{ animationDelay: '80ms' }}
@@ -151,7 +163,6 @@ export default function Page() {
             </div>
           </section>
 
-          {/* Manifest panel */}
           <section
             className="border border-line bg-panel rounded-sm overflow-hidden animate-fadeUp"
             style={{ animationDelay: '160ms' }}
@@ -174,6 +185,8 @@ export default function Page() {
               {alerts.map((a) => {
                 const sev = SEVERITY[a.severity] || SEVERITY.LOW;
                 const isOpen = expanded === a.id;
+                const v = a.hash ? verifyState[a.hash] : null;
+
                 return (
                   <div key={a.id} className={`border-l-2 ${sev.border} pl-4 pr-4 py-3.5`}>
                     <button
@@ -210,6 +223,60 @@ export default function Page() {
                         {a.rules?.length > 0 && <p>RULES &nbsp; {a.rules.join(', ')}</p>}
                         {a.verdict && <p className="text-ink">{a.verdict}</p>}
                         {a.hash && <p className="break-all">HASH &nbsp; {a.hash}</p>}
+
+                        {a.anchored && a.hash && (
+                          <div className="pt-2">
+                            {!v && (
+                              <button
+                                onClick={() => runVerify(a.hash)}
+                                className="inline-flex items-center gap-1.5 text-nominal border border-nominal/40 rounded-sm px-2.5 py-1 hover:bg-nominal/10 transition-colors"
+                              >
+                                <BadgeCheck className="w-3 h-3" />
+                                VERIFY ON-CHAIN
+                              </button>
+                            )}
+
+                            {v?.loading && (
+                              <span className="inline-flex items-center gap-1.5 text-dim">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Querying ReceiptRegistry...
+                              </span>
+                            )}
+
+                            {v?.data?.chain?.anchored && (
+                              <div className="bg-raised border border-nominal/30 rounded-sm px-3 py-2.5 space-y-1">
+                                <p className="text-nominal flex items-center gap-1.5">
+                                  <BadgeCheck className="w-3 h-3" />
+                                  CONFIRMED ON-CHAIN
+                                </p>
+                                <p>SUBMITTER &nbsp; {short(v.data.chain.submitter)}</p>
+                                <p>
+                                  TIMESTAMP &nbsp;
+                                  {new Date(v.data.chain.timestamp * 1000).toLocaleString()}
+                                </p>
+                                <a
+                                  href={v.data.chain.explorerUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-info hover:underline pt-1"
+                                >
+                                  View ReceiptRegistry on explorer
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
+                            )}
+
+                            {v?.data && !v.data.chain?.anchored && (
+                              <p className="text-caution">
+                                Not found on-chain yet — anchoring transaction may still be confirming.
+                              </p>
+                            )}
+
+                            {v?.error && (
+                              <p className="text-critical">Verification failed: {v.error}</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -219,7 +286,6 @@ export default function Page() {
           </section>
         </div>
 
-        {/* Telemetry strip */}
         <footer
           className="mt-5 border border-line bg-panel rounded-sm px-5 py-4 flex flex-wrap items-center gap-x-8 gap-y-3 animate-fadeUp"
           style={{ animationDelay: '220ms' }}
