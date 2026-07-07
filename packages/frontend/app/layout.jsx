@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'ShieldGuard — Flight Recorder',
-  description: 'BOT Chain security event recorder',
+  title: 'ShieldGuard — Sentinel Console',
+  description: 'Live on-chain threat monitoring for BOT Chain',
 };
 
 export default function RootLayout({ children }) {
@@ -8,7 +8,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <head>
         <link
-          href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Michroma&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
       </head>
