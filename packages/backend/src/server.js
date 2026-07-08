@@ -11,7 +11,8 @@ import {
   getUserStats,
   recordEvent,
 } from "./store.js";
-import { evaluateApproval, evaluateApprovalForAll } from "./ruleEngine.js";
+import { evaluateApproval, evaluateApprovalForAll, evaluateCall } from "./ruleEngine.js";
+import { matchCriticalCall } from "./contractTargets.js";
 import { generateVerdict } from "./policyEngine.js";
 
 // Known function selectors this pre-signing checker can actually reason
@@ -57,36 +58,47 @@ function decodeCalldata(data) {
 // of an already-mined log. Never signs, never anchors, never touches gas —
 // purely advisory: caller's own wallet still does the actual signing.
 async function validateProposedTx({ from, to, value, data }, provider) {
-  const decoded = decodeCalldata(data);
+  const selector = data && data.length >= 10 ? data.slice(0, 10) : null;
+  const criticalMatch = selector ? matchCriticalCall(to, selector) : null;
+
   let result;
 
-  if (decoded?.name === "approve") {
-    const [spender, amount] = decoded.args;
-    let ownerBalance = 0n;
-    try {
-      if (provider && to) {
-        const token = new Contract(to, ERC20_BALANCE_ABI, provider);
-        ownerBalance = await token.balanceOf(from);
-      }
-    } catch {
-      // Balance lookup failing (bad RPC, non-ERC20 target) shouldn't block
-      // the check — evaluateApproval treats ownerBalance=0 as "unknown," not
-      // "unlimited," so this just skips the P001 over-balance rule.
-    }
-    result = evaluateApproval({ owner: from, spender, value: amount, ownerBalance });
-  } else if (decoded?.name === "setApprovalForAll") {
-    const [operator, approved] = decoded.args;
-    result = evaluateApprovalForAll({ owner: from, operator, approved, knownOperators: KNOWN_NFT_OPERATORS });
-  } else if (decoded?.name === "transfer" || decoded?.name === "transferFrom") {
-    // No specific pre-signing rule for plain transfers yet — visibility only.
-    result = { risk: "LOW", score: 0, matched_rules: [], reason: "Standard transfer, no pre-signing rule matched" };
+  if (criticalMatch) {
+    // This selector matches a function on CONTRACT_TARGETS' critical list —
+    // same detector the live on-chain listener uses, just running before
+    // the agent signs instead of after the tx is mined.
+    result = evaluateCall({ contractName: criticalMatch.target.name, functionName: criticalMatch.functionName });
   } else {
-    result = {
-      risk: "LOW",
-      score: 0,
-      matched_rules: [],
-      reason: data && data !== "0x" ? "Unrecognized calldata — no specific rule available" : "Plain value transfer, no calldata",
-    };
+    const decoded = decodeCalldata(data);
+
+    if (decoded?.name === "approve") {
+      const [spender, amount] = decoded.args;
+      let ownerBalance = 0n;
+      try {
+        if (provider && to) {
+          const token = new Contract(to, ERC20_BALANCE_ABI, provider);
+          ownerBalance = await token.balanceOf(from);
+        }
+      } catch {
+        // Balance lookup failing (bad RPC, non-ERC20 target) shouldn't block
+        // the check — evaluateApproval treats ownerBalance=0 as "unknown," not
+        // "unlimited," so this just skips the P001 over-balance rule.
+      }
+      result = evaluateApproval({ owner: from, spender, value: amount, ownerBalance });
+    } else if (decoded?.name === "setApprovalForAll") {
+      const [operator, approved] = decoded.args;
+      result = evaluateApprovalForAll({ owner: from, operator, approved, knownOperators: KNOWN_NFT_OPERATORS });
+    } else if (decoded?.name === "transfer" || decoded?.name === "transferFrom") {
+      // No specific pre-signing rule for plain transfers yet — visibility only.
+      result = { risk: "LOW", score: 0, matched_rules: [], reason: "Standard transfer, no pre-signing rule matched" };
+    } else {
+      result = {
+        risk: "LOW",
+        score: 0,
+        matched_rules: [],
+        reason: data && data !== "0x" ? "Unrecognized calldata — no specific rule available" : "Plain value transfer, no calldata",
+      };
+    }
   }
 
   const record = { token: to, tokenAddress: to, txHash: null, timestamp: new Date().toISOString(), ...result };
