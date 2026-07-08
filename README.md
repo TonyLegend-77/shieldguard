@@ -1,40 +1,72 @@
-# ShieldGuard: BOTChain Security Flight Recorder
+# ShieldGuard — Live On-Chain Threat Monitoring for BOT Chain
 
-A full-stack security monitoring system for BOT Chain that watches token approvals/transfers, flags risky patterns, generates AI verdicts, cryptographically signs findings, and anchors them on-chain.
+ShieldGuard watches BOT Chain in real time, scores suspicious activity against a rule engine and an AI policy layer, cryptographically signs every verdict, and anchors it permanently on-chain — so a flagged threat can't be quietly edited or disputed after the fact. It also ships a non-custodial SDK so AI agents can get the same checks *before* they ever sign a transaction, not just after.
+
+## What it actually watches
+
+**On-chain, event-based** (polled every ~4s, `packages/backend/src/listener.js`):
+- `Approval` — unlimited approvals, approvals exceeding 10x the owner's balance
+- `Transfer` — zero-value "address poisoning" transfers from lookalike addresses
+- `ApprovalForAll` (ERC-721/1155) — blanket collection-wide approvals to unrecognized operators, the mechanism behind most NFT drainer kits
+- `OwnershipTransferred`, `Paused`, `Unpaused` — admin/owner privileged-call monitoring, distinct from user-wallet risk
+
+**On-chain, transaction-based** (`contractTargets.js`): for contracts with no standard event to watch, ShieldGuard pulls each full block and matches `tx.data`'s 4-byte selector against a per-contract map of real function selectors (read directly off verified source on scan.bohr.life) — catching calls to things like `submitTransaction`, `stake`, `placeBid`, `mint` even when nothing gets logged.
+
+**Pre-signing, via HTTP** (`POST /api/validate`, `POST /api/intent/build`): the same rule engine runs against proposed calldata *before* a transaction is signed — decoding `approve`, `setApprovalForAll`, `transfer`/`transferFrom`, and any mapped critical-function call. This is what `@shieldguard/sdk` calls under the hood.
+
+Every flagged result — regardless of which detector caught it — runs through one shared pipeline: AI verdict → cryptographic signature → on-chain anchor via `ReceiptRegistry.sol` → recorded to the dashboard.
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Next.js       │────▶│  Express API    │────▶│  Event Listener │
-│   Dashboard     │◄────│  (Railway)      │◄────│  (Ethers.js)    │
-│   (Vercel)      │     │                 │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                              │                        │
-                              ▼                        ▼
-                        ┌─────────┐            ┌─────────────┐
-                        │ SQLite  │            │ Rule Engine │
-                        │ Store   │            │ (P001/P002) │
-                        └─────────┘            └─────────────┘
-                              │                        │
-                              ▼                        ▼
-                        ┌─────────┐            ┌─────────────┐
-                        │Webhook  │            │ AI Policy   │
-                        │/monitor │            │ Engine      │
-                        └─────────┘            └─────────────┘
-                                                       │
-                                                       ▼
-                                               ┌─────────────┐
-                                               │  Signature  │
-                                               │  Service    │
-                                               └─────────────┘
-                                                       │
-                                                       ▼
-                                               ┌─────────────┐
-                                               │ReceiptRegistry│
-                                               │  (Solidity) │
-                                               └─────────────┘
+┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│   Next.js        │────▶│  Express API     │────▶│  Event Listener  │
+│   Dashboard       │◄────│  (Railway)       │◄────│  (Ethers.js)     │
+│   (Vercel)        │     │                  │     │                 │
+└─────────────────┘     └──────────────────┘     └──────────────────┘
+                              │      │                    │
+                              ▼      ▼                    ▼
+                      ┌─────────┐ ┌──────────┐    ┌──────────────────┐
+                      │ Store    │ │ Webhook  │    │  Rule Engine      │
+                      │(memory or│ │ /monitor │    │ (P/N/A/T/C rules) │
+                      │ SQLite)  │ └──────────┘    └──────────────────┘
+                      └─────────┘                          │
+                                                            ▼
+                                                    ┌──────────────────┐
+                                                    │  AI Policy Engine │
+                                                    │ (Gemini→OpenAI→   │
+                                                    │  Anthropic→local) │
+                                                    └──────────────────┘
+                                                            │
+                                                            ▼
+                                                    ┌──────────────────┐
+                                                    │ Signature Service │
+                                                    └──────────────────┘
+                                                            │
+                                                            ▼
+                                                    ┌──────────────────┐
+                                                    │ ReceiptRegistry   │
+                                                    │   (Solidity)      │
+                                                    └──────────────────┘
+
+┌──────────────────┐
+│ @shieldguard/sdk  │──── HTTP only, no shared code ────▶  POST /api/validate
+│ (agents/wallets)  │──── HTTP only, no shared code ────▶  POST /api/intent/build
+└──────────────────┘
 ```
+
+## Non-custodial agent firewall (`packages/sdk`)
+
+AI agents holding their own keys are a major drain vector — a compromised or prompt-injected agent can sign anything it's tricked into. `@shieldguard/sdk` wraps any ethers.js signer and checks every transaction with ShieldGuard before it's signed:
+
+```js
+import { ShieldGuardSigner } from '@shieldguard/sdk';
+
+const signer = new ShieldGuardSigner(agentWallet, { apiUrl: 'https://your-backend.up.railway.app' });
+await signer.sendTransaction(tx); // throws if ShieldGuard flags it — never reaches the real signer
+```
+
+ShieldGuard never holds a key, never touches gas, and never signs anything on the agent's behalf — it only returns a verdict. Agents that would rather describe *what* they want than build calldata can use the Intent Router (`buildIntent`) instead, which validates a high-level action (`approve`, `setApprovalForAll`, `transfer`) and returns a ready-to-sign tx for the caller's own wallet.
 
 ## Quick Start
 
@@ -71,6 +103,7 @@ npm run dev:frontend
 1. Approve a spender on WBOT or USDT from your wallet
 2. Watch console for: `🚨 FLAGGED` → `Verdict:` → `Signed by:` → `Anchored:`
 3. Open http://localhost:3000 to see the dashboard flip to LIVE
+4. Or skip waiting for a real event entirely — use the "SDK PRE-SIGNING TESTER" panel on the live site to fire a scenario (unlimited approval, blanket NFT approval, etc.) straight at `/api/validate`
 
 ## Deployment
 
@@ -104,7 +137,9 @@ npm run dev:frontend
 | `GEMINI_API_KEY` | No | Primary AI verdict provider (fastest, cheapest) |
 | `OPENAI_API_KEY` | No | Falls back to this if Gemini isn't set/fails |
 | `ANTHROPIC_API_KEY` | No | Falls back to this if OpenAI isn't set/fails |
-| `USE_SQLITE` | No | Set `true` for persistent storage |
+| `KNOWN_NFT_OPERATORS` | No | Comma-separated marketplace operator addresses scored lower on `ApprovalForAll` |
+| `USE_SQLITE` | No | Set `true` for persistent storage (survives restarts; needs a mounted Railway Volume + `SQLITE_PATH` to survive a full redeploy) |
+| `SQLITE_PATH` | No | Path to the `.db` file when `USE_SQLITE=true`, ideally on a mounted volume |
 | `PORT` | No | Defaults to `4000` |
 | `PUBLIC_TX_LIMIT` | No | Free-tier tx cap per contract, defaults to `20` |
 | `PRIVATE_TX_LIMIT` | No | Paid-tier tx cap per contract, defaults to `50` |
@@ -123,7 +158,7 @@ Contracts are counted only on transactions ShieldGuard actually signs and anchor
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/alerts` | All recorded events |
-| GET | `/guardians` | Watched tokens |
+| GET | `/guardians` | Watched contracts |
 | GET | `/health` | Status + config |
 | GET | `/verify/:hash` | Lookup receipt by hash |
 | GET | `/signature/address` | Signer public key |
@@ -132,6 +167,8 @@ Contracts are counted only on transactions ShieldGuard actually signs and anchor
 | GET | `/api/user/contracts?address=` | Contracts a wallet added |
 | GET | `/api/user/alerts?address=` | Alerts scoped to a wallet's contracts |
 | GET | `/api/user/stats?address=` | A wallet's tier + tx usage |
+| POST | `/api/validate` | SDK Wrapper — pre-signing check on a raw `{from, to, value, data}` |
+| POST | `/api/intent/build` | Intent Router — validate a high-level intent, get back a ready-to-sign tx |
 | GET | `/monitor` | List all monitored contracts |
 | GET | `/monitor/stats/:address` | Tier/usage stats for one contract |
 | GET | `/monitor/limits` | Tx usage/limits for all contracts |
@@ -144,14 +181,25 @@ Contracts are counted only on transactions ShieldGuard actually signs and anchor
 
 `ReceiptRegistry.sol` is deployed via Hardhat in the Railway build step. It anchors signature hashes on-chain with metadata for verifiable audit trails.
 
+## Rule Engine
+
+Every detector produces a `{ risk, matched_rules, reason }` result that flows through the same verdict → sign → anchor pipeline:
+
+- **P001/P002** — ERC-20 approval exceeds 10x balance / is unlimited
+- **N001/N002** — ERC-721/1155 `setApprovalForAll` to an unrecognized / known operator
+- **A001/A002/A003** — ownership transfer (no baseline / from expected owner), pause/unpause
+- **T001/T002** — zero-value transfer from a lookalike ("address poisoning") / unmatched address
+- **C001** — critical function call matched on a `contractTargets.js`-registered contract
+
 ## Threat Corpus
 
-33 patterns across 5 tiers:
-- **G001-G016**: Generic EVM attack patterns (approval exploits, honeypots, rug pulls, reentrancy, etc.)
-- **H001-H003**: Historical exploit case studies (Ronin, Wormhole, Euler)
-- **L001-L009**: BOT Chain verified live contracts and network config
-- **E001-E003**: Ecosystem context (CiaoTool, Meridian, Tandot)
-- **P001-P008**: ShieldGuard policy scoring rules
+46 entries across 6 tiers, in `bot_chain_threats.jsonl`:
+- **G001–G016**: generic EVM attack patterns (approval exploits, honeypots, rug pulls, reentrancy, etc.)
+- **H001–H003**: historical exploit case studies (Ronin, Wormhole, Euler)
+- **L001–L009**: BOT Chain verified live contracts and network config
+- **E001–E003**: ecosystem context (CiaoTool, Meridian, Tandot)
+- **P001–P008**: ShieldGuard policy scoring rules
+- **N001/N002, A001–A003, T001/T002**: rules for the ApprovalForAll, admin-event, and address-poisoning detectors above
 
 ## License
 
