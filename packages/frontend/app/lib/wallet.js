@@ -6,6 +6,28 @@ const STORAGE_KEY = 'sg_wallet';
 const TARGET_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '968', 10);
 const CHAIN_HEX = '0x' + TARGET_CHAIN_ID.toString(16);
 
+// Standalone helper (not part of useWallet) — sends one raw transaction via
+// the injected EIP-1193 provider. Used after the Intent Router returns a
+// ready-to-sign { to, data, value } so the connected wallet can actually
+// sign and broadcast it, closing the loop from intent -> verdict -> tx.
+export async function sendRawTransaction({ from, to, data, value }) {
+  if (typeof window === 'undefined' || !window.ethereum) {
+    throw new Error('No wallet provider found (window.ethereum missing).');
+  }
+  if (!from || !to) throw new Error('from and to are required to send a transaction.');
+
+  // eth_sendTransaction wants value as a 0x-prefixed hex string, but
+  // /api/intent/build returns it as a decimal string (e.g. "0").
+  const hexValue = '0x' + BigInt(value || '0').toString(16);
+
+  const txHash = await window.ethereum.request({
+    method: 'eth_sendTransaction',
+    params: [{ from, to, data: data || '0x', value: hexValue }],
+  });
+
+  return txHash;
+}
+
 // Raw EIP-1193 wallet connection — deliberately no wagmi/ethers dependency
 // on the frontend. All we need is an address, a chain id, and the ability
 // to send one raw transaction for the private-tier payment.
