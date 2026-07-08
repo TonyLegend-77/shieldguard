@@ -1,6 +1,8 @@
 # ShieldGuard — Live On-Chain Threat Monitoring for BOT Chain
 
-ShieldGuard watches BOT Chain in real time, scores suspicious activity against a rule engine and an AI policy layer, cryptographically signs every verdict, and anchors it permanently on-chain — so a flagged threat can't be quietly edited or disputed after the fact. It also ships a non-custodial SDK so AI agents can get the same checks *before* they ever sign a transaction, not just after.
+AI agents and wallets get drained because approvals are invisible until it's too late. ShieldGuard watches BOT Chain in real time and turns suspicious activity into proof before damage is done — **detection and proof, never custody.** ShieldGuard never holds a key, never holds funds, and never touches gas on anyone's behalf — it only watches, scores, verdicts, signs, and anchors.
+
+That principle extends to agents too: `@shieldguard/sdk` lets an AI agent get every transaction checked *before* it signs, without ever handing ShieldGuard a private key.
 
 ## What it actually watches
 
@@ -21,7 +23,7 @@ Every flagged result — regardless of which detector caught it — runs through
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
 │   Next.js        │────▶│  Express API     │────▶│  Event Listener  │
-│   Dashboard       │◄────│  (Railway)       │◄────│  (Ethers.js)     │
+│ Landing+Dashboard │◄────│  (Railway)       │◄────│  (Ethers.js)     │
 │   (Vercel)        │     │                  │     │                 │
 └─────────────────┘     └──────────────────┘     └──────────────────┘
                               │      │                    │
@@ -54,6 +56,14 @@ Every flagged result — regardless of which detector caught it — runs through
 │ (agents/wallets)  │──── HTTP only, no shared code ────▶  POST /api/intent/build
 └──────────────────┘
 ```
+
+## Frontend
+
+`packages/frontend` is a two-route Next.js app:
+- `/` — marketing landing page (hero, the problem, how it watches, a live stats strip pulled from `/api/stats/global`)
+- `/dashboard` — the actual live console: Guardians, the flagged-activity feed (each entry rendered as a signed "receipt" — the visual nod to "every threat gets a signed, anchored receipt"), your connected wallet's contracts, and the SDK pre-signing tester
+
+Light theme (paper/lavender), Fraunces for display type, IBM Plex Sans/Mono for body and data.
 
 ## Non-custodial agent firewall (`packages/sdk`)
 
@@ -102,8 +112,8 @@ npm run dev:frontend
 
 1. Approve a spender on WBOT or USDT from your wallet
 2. Watch console for: `🚨 FLAGGED` → `Verdict:` → `Signed by:` → `Anchored:`
-3. Open http://localhost:3000 to see the dashboard flip to LIVE
-4. Or skip waiting for a real event entirely — use the "SDK PRE-SIGNING TESTER" panel on the live site to fire a scenario (unlimited approval, blanket NFT approval, etc.) straight at `/api/validate`
+3. Open http://localhost:3000 for the landing page, then click "Open the dashboard" (or go straight to http://localhost:3000/dashboard) to see it flip to LIVE
+4. Or skip waiting for a real event entirely — use the "SDK pre-signing tester" panel on the dashboard to fire a scenario (unlimited approval, blanket NFT approval, etc.) straight at `/api/validate`
 
 ## Deployment
 
@@ -204,3 +214,4 @@ Every detector produces a `{ risk, matched_rules, reason }` result that flows th
 ## License
 
 MIT
+
