@@ -10,7 +10,7 @@ import {
   getUserAlerts,
   getUserStats,
   recordEvent,
-} from "./store.js";
+} from "./storeAdapter.js";
 import { evaluateApproval, evaluateApprovalForAll, evaluateCall } from "./ruleEngine.js";
 import { matchCriticalCall } from "./contractTargets.js";
 import { generateVerdict } from "./policyEngine.js";
