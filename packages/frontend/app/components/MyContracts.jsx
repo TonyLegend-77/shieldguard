@@ -61,12 +61,12 @@ export default function MyContracts({ wallet }) {
   if (!address) return null;
 
   return (
-    <section className="border border-line bg-panel rounded-sm overflow-hidden animate-fadeUp">
+    <section className="border border-line bg-surface rounded-xl overflow-hidden animate-fadeUp">
       <div className="border-b border-line px-4 py-3 flex items-center justify-between">
-        <h2 className="font-display text-[11px] tracking-[0.15em] text-dim">MY CONTRACTS</h2>
+        <h2 className="font-display text-sm text-ink">My contracts</h2>
         <button
           onClick={() => setFormOpen((v) => !v)}
-          className="inline-flex items-center gap-1 font-mono text-[10px] text-nominal border border-nominal/40 rounded-sm px-2 py-1 hover:bg-nominal/10 transition-colors"
+          className="inline-flex items-center gap-1 font-mono text-[10px] text-accent border border-accent/40 rounded-full px-2 py-1 hover:bg-accentSoft transition-colors"
         >
           <Plus className="w-3 h-3" />
           ADD CONTRACT
@@ -186,19 +186,19 @@ function AddContractForm({ wallet, onAdded }) {
   };
 
   return (
-    <form onSubmit={submit} className="px-4 py-4 border-b border-line bg-raised space-y-3">
+    <form onSubmit={submit} className="px-4 py-4 border-b border-line bg-surfaceAlt space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Name"
-          className="bg-void border border-line rounded-sm px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-nominal/50"
+          className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
         />
         <input
           value={contractAddress}
           onChange={(e) => setContractAddress(e.target.value)}
           placeholder="0x contract address"
-          className="bg-void border border-line rounded-sm px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-nominal/50"
+          className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
         />
       </div>
 
@@ -222,7 +222,7 @@ function AddContractForm({ wallet, onAdded }) {
         <button
           type="submit"
           disabled={status === 'paying' || status === 'submitting'}
-          className="inline-flex items-center gap-1.5 font-mono text-[11px] text-nominal border border-nominal/40 rounded-sm px-3 py-1.5 hover:bg-nominal/10 transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 font-mono text-[11px] text-accent border border-accent/40 rounded-full px-3 py-1.5 hover:bg-accentSoft transition-colors disabled:opacity-50"
         >
           {status === 'paying' && (
             <>
