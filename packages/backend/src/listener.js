@@ -10,7 +10,7 @@ import {
   evaluateTransferSpoof,
   evaluateCall,
 } from "./ruleEngine.js";
-import { registerGuardian, recordEvent, canMonitorContract } from "./store.js";
+import { registerGuardian, recordEvent, canMonitorContract } from "./storeAdapter.js";
 import { CONTRACT_TARGETS } from "./contractTargets.js";
 import { startServer } from "./server.js";
 import { generateVerdict } from "./policyEngine.js";
