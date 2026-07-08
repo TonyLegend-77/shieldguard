@@ -4,34 +4,58 @@
 
 body {
   font-family: 'IBM Plex Sans', sans-serif;
-  background-color: #0A0C0F;
-  color: #E7ECEF;
+  background-color: #FAF9F6;
+  color: #211D45;
   min-height: 100vh;
-}
-
-.bg-grid {
-  background-image:
-    linear-gradient(rgba(231, 236, 239, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(231, 236, 239, 0.035) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-.bg-vignette {
-  background: radial-gradient(ellipse at 50% -10%, rgba(53, 217, 180, 0.06), transparent 60%);
 }
 
 ::-webkit-scrollbar {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #14181C;
+  background: #FAF9F6;
 }
 ::-webkit-scrollbar-thumb {
-  background: #262C32;
+  background: #E7E4F5;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a4149;
+  background: #D3CEEE;
+}
+
+/* Signature element: each alert renders like a torn receipt stub — a
+   perforated edge and notched sides, since ShieldGuard's whole premise is
+   that a threat isn't real until it has a signed, anchored receipt. */
+.receipt {
+  position: relative;
+  background: #FFFFFF;
+  border: 1px solid #E7E4F5;
+  border-radius: 4px;
+}
+.receipt::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: -7px;
+  width: 14px;
+  height: 14px;
+  background: #FAF9F6;
+  border: 1px solid #E7E4F5;
+  border-radius: 50%;
+}
+.receipt::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  right: -7px;
+  width: 14px;
+  height: 14px;
+  background: #FAF9F6;
+  border: 1px solid #E7E4F5;
+  border-radius: 50%;
+}
+.receipt-perforation {
+  border-top: 1px dashed #E7E4F5;
 }
 
 @media (prefers-reduced-motion: reduce) {
