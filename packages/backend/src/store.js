@@ -43,7 +43,7 @@ export function registerGuardian(name, address, options = {}) {
   if (!key) return null;
   if (state.guardians.has(key)) return state.guardians.get(key);
 
-  const { addedBy = "admin", addedByAddress = null, paymentTx = null } = options;
+  const { addedBy = "admin", addedByAddress = null, paymentTx = null, monitorCalls = false, criticalFunctions = [] } = options;
   const tier = options.tier || (addedBy === "admin" ? "admin" : "public");
   const txLimit = addedBy === "admin" ? Infinity : tier === "private" ? PRIVATE_TX_LIMIT : PUBLIC_TX_LIMIT;
 
@@ -55,6 +55,8 @@ export function registerGuardian(name, address, options = {}) {
     addedByAddress: addedByAddress ? keyFor(addedByAddress) : null,
     tier,
     paymentTx,
+    monitorCalls,
+    criticalFunctions,
     txCount: 0, // count of actually signed + anchored transactions
     txLimit,
     scanned: 0,
