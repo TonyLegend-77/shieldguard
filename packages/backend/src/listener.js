@@ -8,6 +8,7 @@ import {
   evaluateApprovalForAll,
   evaluateAdminEvent,
   evaluateTransferSpoof,
+  evaluateCall,
 } from "./ruleEngine.js";
 import { registerGuardian, recordEvent, canMonitorContract } from "./store.js";
 import { startServer } from "./server.js";
@@ -41,6 +42,144 @@ const ERC20_ABI = [
 const TARGETS = [
   { name: "WBOT", address: process.env.WBOT_ADDRESS },
   { name: "USDT", address: process.env.USDT_ADDRESS },
+  { name: "bwUSDT", address: "0xAfea2A5e0587615ceD6972e271E5bfe8622ebcA2" },
+  { name: "bwETH", address: "0x6916414F7e390af45c29c89b0aC1Aa79c568D09D" },
+  { name: "bwUSDC", address: "0x9D55Fba17a37AF9f7ED6d073b2A533Ed3Ed72C03" },
+  { name: "tUSDT", address: "0xDAca65D8Dd2621F0e976648386495Be1151A7177" },
+  { name: "Mock USDT", address: "0xe6Bd650807ddEdd7Aecdd5083F6bf7ECB6bBCE58" },
+  { name: "BOT Governance Token", address: "0x0000000000000000000000000000000000002005" },
+  { name: "BOT V2 LP Token", address: "0xBca241D71854da5Bf6E59591701995AB935f2E74" },
+  { name: "Stake Val003 Credit", address: "0x4AFc633E7B6bEB8e552ccddbE06Cca3754991E9A" },
+  { name: "Rocket Doge", address: "0xf77c188aBFf5A30D560c4242BfdedDb5a33dEa0E" },
+  // Skipped — truncated in the source list, need full addresses before adding:
+  //   USDT (secondary entry, "0x75edC93310420fe3"), MONEY ("0xd93ad23F751C6E6C"),
+  //   Rocket Doge dup ("0x83c56D73C2418F")
+];
+
+// Generic contract-call monitoring: unlike Approval/Transfer/ApprovalForAll/
+// admin events above, arbitrary functions have no shared event to poll, so
+// we watch raw transactions sent to these addresses and match the 4-byte
+// function selector (tx.data[0:10]) against a known map. Selectors marked
+// below were read directly off verified source on scan.bohr.life (Write
+// Contract tab) — entries with an empty functionSelectors map are
+// registered as Guardians for visibility only; calls won't be decoded
+// until their selectors are filled in the same way.
+const CONTRACT_TARGETS = [
+  {
+    name: "TokenFactory",
+    address: "0xa3b71D74bA6E26f37deD0e34A36478E4a99EFDA1",
+    tier: "public",
+    criticalFunctions: ["createToken", "deploy"],
+    functionSelectors: {
+      "0xf5e429a4": "createToken",
+      "0x8406128f": "createTokenInternal",
+      "0x715018a6": "renounceOwnership",
+      "0xf2fde38b": "transferOwnership",
+      "0x64464897": "updateAgentRegistry",
+      "0x172dd37a": "updateTokenCreationFee",
+      "0x476343ee": "withdrawFees",
+    },
+  },
+  {
+    name: "MultiSigWallet",
+    address: "0x1B29765AE3a01551B1374b61B795B8D414BBE78a",
+    tier: "admin",
+    criticalFunctions: [
+      "submitTransaction",
+      "confirmTransaction",
+      "executeTransactionManual",
+      "submitAddOwner",
+      "removeOwnerInternal",
+      "submitChangeMinOwners",
+      "submitChangeRequiredPct",
+    ],
+    functionSelectors: {
+      "0xc01a8c84": "confirmTransaction",
+      "0x40a70f9d": "confirmTransactionsBatch",
+      "0x360003cb": "executeTransactionManual",
+      "0x8456cb59": "pause",
+      "0xb90ae498": "removeOwnerInternal",
+      "0xb8d2cb9d": "submitAddOwner",
+      "0x5c02380d": "submitBatchTransferDifferent",
+      "0xc2e1c8cb": "submitBatchTransferEqual",
+      "0x99413cac": "submitChangeExpiry",
+      "0xfa891262": "submitChangeMinOwners",
+      "0x82554fb1": "submitChangeName",
+      "0xef1dadd2": "submitChangeRequiredPct",
+      "0x05520407": "submitChangeTimelock",
+      "0x92406f19": "submitTransaction",
+      "0x3f4ba83a": "unpause",
+    },
+  },
+  {
+    name: "MultiSigWallet",
+    address: "0x8e0A44464b2459414edD900bD8D68ac923Eb53de",
+    tier: "admin",
+    // Same contract code as the 0x1B29... deployment — confirmed identical
+    // function list on scan.bohr.life, just a separate instance.
+    criticalFunctions: [
+      "submitTransaction",
+      "confirmTransaction",
+      "executeTransactionManual",
+      "submitAddOwner",
+      "removeOwnerInternal",
+      "submitChangeMinOwners",
+      "submitChangeRequiredPct",
+    ],
+    functionSelectors: {
+      "0xc01a8c84": "confirmTransaction",
+      "0x40a70f9d": "confirmTransactionsBatch",
+      "0x360003cb": "executeTransactionManual",
+      "0x8456cb59": "pause",
+      "0xb90ae498": "removeOwnerInternal",
+      "0xb8d2cb9d": "submitAddOwner",
+      "0x5c02380d": "submitBatchTransferDifferent",
+      "0xc2e1c8cb": "submitBatchTransferEqual",
+      "0x99413cac": "submitChangeExpiry",
+      "0xfa891262": "submitChangeMinOwners",
+      "0x82554fb1": "submitChangeName",
+      "0xef1dadd2": "submitChangeRequiredPct",
+      "0x05520407": "submitChangeTimelock",
+      "0x92406f19": "submitTransaction",
+      "0x3f4ba83a": "unpause",
+    },
+  },
+  { name: "CompanyWallet", address: "0x33A4ad07A724A8b300b80bFa0B0B451F3F2E50e6", tier: "admin", criticalFunctions: ["transfer", "approve"], functionSelectors: {} },
+  {
+    name: "NyxBatchAuction",
+    address: "0x58126ae8ff411a3B1768b121763a0E999221b6da",
+    tier: "public",
+    criticalFunctions: ["submitOrder", "settleBatch", "cancelOrder"],
+    functionSelectors: {
+      "0xdf45908a": "submitOrder",
+      "0xa141f148": "settleBatch",
+      "0x7489ec23": "cancelOrder",
+      "0x53eb1a09": "acceptAgent",
+      "0xbcf685ed": "setAgent",
+    },
+  },
+  { name: "NyxBatchAuction", address: "0xC0405E50D1BF816B9Fb1A741Cb46941828c378ea", tier: "public", criticalFunctions: ["submitOrder", "settleBatch", "cancelOrder"], functionSelectors: {} },
+  { name: "Wattline", address: "0x9D0ED40615845ee6134F475AcCF35e0412CA1EdF", tier: "public", criticalFunctions: ["stake", "withdraw", "claim"], functionSelectors: {} },
+  { name: "GaslessGuest", address: "0x5D43267c50b457B58cb94577aa977C5CD21cc071", tier: "public", criticalFunctions: ["execute", "relay"], functionSelectors: {} },
+  { name: "MockSwap", address: "0x6935B8ADD1ad176b73370F45b603Df30a303EF02", tier: "public", criticalFunctions: ["swap", "addLiquidity", "removeLiquidity"], functionSelectors: {} },
+  {
+    name: "AgentAuth",
+    address: "0x3dBBd27D26d2AA3ed321A785C0513969f1fB23B8",
+    tier: "admin",
+    criticalFunctions: ["grantRole", "revokeRole", "mint"],
+    functionSelectors: {
+      "0x095ea7b3": "approve",
+      "0x42966c68": "burn",
+      "0x79cc6790": "burnFrom",
+      "0x2f2ff15d": "grantRole",
+      "0x40c10f19": "mint",
+      "0x36568abe": "renounceRole",
+      "0xd547741f": "revokeRole",
+      "0xa9059cbb": "transfer",
+      "0x23b872dd": "transferFrom",
+    },
+  },
+  { name: "PokerTable", address: "0x8D9Addf007461AB959369eD77df6363e41B8982d", tier: "public", criticalFunctions: ["joinTable", "leaveTable", "distributeWinnings"], functionSelectors: {} },
 ];
 
 // Known-good NFT marketplace operator addresses (e.g. Seaport/OpenSea
@@ -381,6 +520,33 @@ function createHandlers(target, contract) {
   return { handleApproval, handleApprovalForAll, handleAdminEvent, handleTransfer };
 }
 
+// Handles one transaction sent to a call-monitored contract (CONTRACT_TARGETS).
+// Unlike the event-based handlers above, this is triggered by a function-
+// selector match rather than a decoded log — but it feeds into the exact
+// same processFlaggedResult pipeline, so a critical call gets an AI verdict,
+// a signature, and an on-chain anchor just like any other detector.
+function createCallHandler(target) {
+  return async function handleCall(tx) {
+    const selector = tx.data?.slice(0, 10)?.toLowerCase();
+    const functionName = target.functionSelectors[selector];
+
+    if (!functionName) return; // non-critical function, or selector not yet mapped
+    if (!target.criticalFunctions.includes(functionName)) return; // known fn, not on this contract's watch list
+
+    try {
+      const result = evaluateCall({ contractName: target.name, functionName });
+      console.log(`[${target.name}] Critical call: ${functionName}`);
+      await processFlaggedResult(target, result, {
+        txHash: tx.hash,
+        from: tx.from,
+        to: target.address,
+      });
+    } catch (err) {
+      console.error(`[${target.name}] Call handler error:`, err.message);
+    }
+  };
+}
+
 // Called by webhook.js when a new contract is registered via /monitor,
 // /monitor/private, or /monitor/admin. This is what makes those endpoints
 // actually do something, instead of just bookkeeping an address nobody watches.
@@ -450,6 +616,19 @@ async function main() {
 
   await rehydrateFromChain(receiptRegistry);
 
+  const watchedCalls = new Map(); // lowercase address -> handleCall
+  for (const target of CONTRACT_TARGETS) {
+    registerGuardian(target.name, target.address, {
+      tier: target.tier,
+      monitorCalls: true,
+      criticalFunctions: target.criticalFunctions,
+    });
+    if (Object.keys(target.functionSelectors).length === 0) {
+      console.warn(`[listener] ${target.name} (${target.address}) has no known function selectors yet — registered for visibility, but calls won't be decoded until selectors are added.`);
+    }
+    watchedCalls.set(target.address.toLowerCase(), createCallHandler(target));
+  }
+
   // Guard against overlapping cycles: if a previous block's anchoring
   // transaction is still confirming when the next block arrives, skip
   // this tick rather than firing a second on-chain tx with the same
@@ -512,6 +691,22 @@ async function main() {
           w.lastBlock = blockNumber;
         } catch (err) {
           console.error(`[${w.target.name}] Poll error:`, err.message);
+        }
+      }
+
+      // Call monitoring has no event to queryFilter — pull the full block
+      // (with transactions) once per tick and check each tx's `to` against
+      // the watched-contract map, decoding via function selector.
+      if (watchedCalls.size > 0) {
+        try {
+          const block = await provider.getBlock(blockNumber, true);
+          for (const tx of block?.prefetchedTransactions || []) {
+            if (!tx.to) continue; // contract deployment, no `to`
+            const handleCall = watchedCalls.get(tx.to.toLowerCase());
+            if (handleCall) await handleCall(tx);
+          }
+        } catch (err) {
+          console.error("[call-monitor] Block fetch/scan error:", err.message);
         }
       }
     } finally {
