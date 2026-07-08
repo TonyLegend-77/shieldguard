@@ -15,7 +15,7 @@ export default function WalletBar({ wallet }) {
       <button
         onClick={connect}
         disabled={connecting}
-        className="inline-flex items-center gap-2 font-mono text-[11px] tracking-wide border border-line rounded-sm px-3 py-1.5 text-dim hover:text-ink hover:border-nominal/40 transition-colors disabled:opacity-50"
+        className="inline-flex items-center gap-2 font-mono text-[11px] tracking-wide border border-line rounded-full px-3 py-1.5 text-dim hover:text-ink hover:border-accent/40 transition-colors disabled:opacity-50"
       >
         <Wallet className="w-3.5 h-3.5" />
         {connecting ? 'CONNECTING…' : hasProvider ? 'CONNECT WALLET' : 'GET METAMASK'}
@@ -27,7 +27,7 @@ export default function WalletBar({ wallet }) {
     return (
       <button
         onClick={switchToTargetChain}
-        className="inline-flex items-center gap-2 font-mono text-[11px] tracking-wide border border-caution/40 rounded-sm px-3 py-1.5 text-caution hover:bg-caution/10 transition-colors"
+        className="inline-flex items-center gap-2 font-mono text-[11px] tracking-wide border border-caution/40 rounded-full px-3 py-1.5 text-caution hover:bg-caution/10 transition-colors"
       >
         <AlertTriangle className="w-3.5 h-3.5" />
         WRONG NETWORK — SWITCH TO {targetChainId}
@@ -38,7 +38,7 @@ export default function WalletBar({ wallet }) {
   return (
     <button
       onClick={disconnect}
-      className="group inline-flex items-center gap-2 font-mono text-[11px] tracking-wide border border-line rounded-sm px-3 py-1.5 text-ink hover:border-critical/40 transition-colors"
+      className="group inline-flex items-center gap-2 font-mono text-[11px] tracking-wide border border-line rounded-full px-3 py-1.5 text-ink hover:border-critical/40 transition-colors"
       title="Click to disconnect"
     >
       <span className="w-1.5 h-1.5 rounded-full bg-nominal" />
