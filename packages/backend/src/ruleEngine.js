@@ -151,7 +151,20 @@ export function evaluateAdminEvent({ eventName, args = {}, expectedOwner = null 
   };
 }
 
-// Spoofed/dust token transfer heuristic — "address poisoning." Scammers send
+// C001 — a transaction called a function on the contract's own critical-list
+// (e.g. transferOwnership, withdrawFees, executeTransaction). Unlike the
+// detectors above, we don't have a graded severity model here yet —
+// anything on the critical list is HIGH by definition, since it was
+// hand-picked as sensitive when the contract was registered as a Guardian.
+export function evaluateCall({ contractName, functionName }) {
+  return {
+    risk: "HIGH",
+    score: 30,
+    matched_rules: ["C001"],
+    reason: `Critical function '${functionName}' invoked on ${contractName}`,
+    functionName,
+  };
+}
 // a zero-value (or dust) transfer from a wallet crafted to share the same
 // leading/trailing characters as one the victim regularly pays, hoping the
 // victim later copies the poisoned address from their tx history instead of
