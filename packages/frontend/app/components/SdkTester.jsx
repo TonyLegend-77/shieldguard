@@ -109,11 +109,11 @@ export default function SdkTester({ wallet }) {
   };
 
   return (
-    <section className="border border-line bg-panel rounded-sm overflow-hidden animate-fadeUp">
+    <section className="border border-line bg-surface rounded-xl overflow-hidden animate-fadeUp">
       <div className="border-b border-line px-4 py-3 flex items-center gap-2">
         <FlaskConical className="w-3.5 h-3.5 text-dim" />
-        <h2 className="font-display text-[11px] tracking-[0.15em] text-dim">
-          SDK PRE-SIGNING TESTER — /api/validate
+        <h2 className="font-display text-sm text-ink">
+          SDK pre-signing tester — /api/validate
         </h2>
       </div>
 
@@ -122,7 +122,7 @@ export default function SdkTester({ wallet }) {
           <select
             value={scenario}
             onChange={(e) => setScenario(e.target.value)}
-            className="bg-void border border-line rounded-sm px-2.5 py-1.5 font-mono text-xs text-ink focus:outline-none focus:border-nominal/50"
+            className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink focus:outline-none focus:border-accent/50"
           >
             {Object.entries(SCENARIOS).map(([key, s]) => (
               <option key={key} value={key}>{s.label}</option>
@@ -133,14 +133,14 @@ export default function SdkTester({ wallet }) {
             value={from}
             onChange={(e) => setFrom(e.target.value)}
             placeholder="From address (defaults to connected wallet)"
-            className="bg-void border border-line rounded-sm px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-nominal/50"
+            className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
           />
 
           <input
             value={to}
             onChange={(e) => setTo(e.target.value)}
             placeholder="To — target contract address"
-            className="bg-void border border-line rounded-sm px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-nominal/50"
+            className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
           />
 
           {cfg.needsSpender ? (
@@ -148,14 +148,14 @@ export default function SdkTester({ wallet }) {
               value={spender}
               onChange={(e) => setSpender(e.target.value)}
               placeholder={cfg.spenderLabel || 'Spender address'}
-              className="bg-void border border-line rounded-sm px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-nominal/50"
+              className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
             />
           ) : (
             <input
               value={customData}
               onChange={(e) => setCustomData(e.target.value)}
               placeholder="Raw calldata (0x...)"
-              className="bg-void border border-line rounded-sm px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-nominal/50"
+              className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
             />
           )}
         </div>
@@ -164,7 +164,7 @@ export default function SdkTester({ wallet }) {
           <button
             type="submit"
             disabled={status === 'loading'}
-            className="inline-flex items-center gap-1.5 font-mono text-[11px] text-nominal border border-nominal/40 rounded-sm px-3 py-1.5 hover:bg-nominal/10 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 font-mono text-[11px] text-accent border border-accent/40 rounded-full px-3 py-1.5 hover:bg-accentSoft transition-colors disabled:opacity-50"
           >
             {status === 'loading' ? (
               <>
