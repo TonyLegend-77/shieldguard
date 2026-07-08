@@ -152,7 +152,14 @@ export default function Page() {
               {guardians.map((g) => (
                 <div key={g.id} className="px-4 py-4">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-mono text-sm font-medium text-ink">{g.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-medium text-ink">{g.name}</span>
+                      {g.tier && (
+                        <span className="font-mono text-[9px] tracking-wide px-1.5 py-0.5 rounded-sm border border-line text-faint">
+                          {g.tier.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
                     <span className="flex items-center gap-1.5 text-[10px] font-mono text-nominal">
                       <Radio className="w-3 h-3 animate-pulseDot" />
                       SCANNING
@@ -161,6 +168,18 @@ export default function Page() {
                   <p className="font-mono text-[11px] text-dim break-all mb-2">
                     {short(g.address)}
                   </p>
+                  {g.monitorCalls && g.criticalFunctions?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {g.criticalFunctions.map((fn) => (
+                        <span
+                          key={fn}
+                          className="font-mono text-[9px] px-1.5 py-0.5 rounded-sm bg-raised text-dim border border-line"
+                        >
+                          {fn}()
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex gap-4 font-mono text-[11px]">
                     <span className="text-dim">
                       SCANNED <span className="text-ink">{g.scanned}</span>
