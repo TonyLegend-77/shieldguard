@@ -4,7 +4,7 @@ import {
   getGuardians,
   getGuardianStats,
   canUserAddMoreContracts,
-} from "./store.js";
+} from "./storeAdapter.js";
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const TRANSFER_ABI = ["event Transfer(address indexed from, address indexed to, uint256 value)"];
