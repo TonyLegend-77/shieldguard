@@ -15,6 +15,7 @@ import {
 import { useWallet } from './lib/wallet';
 import WalletBar from './components/WalletBar';
 import MyContracts from './components/MyContracts';
+import SdkTester from './components/SdkTester';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -313,6 +314,10 @@ export default function Page() {
           </section>
         </div>
 
+        <div className="mt-5">
+          <SdkTester wallet={wallet} />
+        </div>
+
         <footer
           className="mt-5 border border-line bg-panel rounded-sm px-5 py-4 flex flex-wrap items-center gap-x-8 gap-y-3 animate-fadeUp"
           style={{ animationDelay: '220ms' }}
@@ -327,7 +332,7 @@ export default function Page() {
         </footer>
 
         <p className="mt-4 font-mono text-[10px] text-faint text-center">
-          33 threat patterns · rule engine v1 · policy engine v1
+          46 threat patterns · rule engine v2 · policy engine v1 · SDK pre-signing firewall live
         </p>
       </div>
     </main>
