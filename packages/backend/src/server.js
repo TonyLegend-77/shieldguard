@@ -1,5 +1,5 @@
 import express from "express";
-import { Interface, Contract } from "ethers";
+import { Interface, Contract, keccak256, toUtf8Bytes } from "ethers";
 import { verifyOnChain } from "./chainVerify.js";
 import cors from "cors";
 import {
@@ -15,6 +15,7 @@ import { evaluateApproval, evaluateApprovalForAll, evaluateCall } from "./ruleEn
 import { matchCriticalCall } from "./contractTargets.js";
 import { generateVerdict } from "./policyEngine.js";
 import { dispatchAlert } from "./alertDispatch.js";
+import { ValidationOracle } from "./validationOracle.js";
 import {
   addConnection,
   removeConnection,
@@ -23,6 +24,23 @@ import {
   verifyAndUpgrade,
 } from "./connections.js";
 import { handleTelegramWebhook, notifyTelegramWatchers } from "./telegramDispatch.js";
+
+// Rule catalog for /api/policy/rules — descriptions of the actual codes
+// ruleEngine.js and validationOracle.js can return in matched_rules/reason,
+// not an aspirational list. Keep this in sync if a rule's condition changes.
+const POLICY_RULE_CATALOG = [
+  { id: "P002", tier: "hard_floor", target: "ERC20.approve()", assertion: "Approval amount == uint256.max (unlimited)." },
+  { id: "P001", tier: "advisory", target: "ERC20.approve()", assertion: "Approval amount exceeds 10x the owner's token balance." },
+  { id: "N001", tier: "advisory", target: "ERC721/1155.setApprovalForAll()", assertion: "approved=true granted to an operator not on the known-marketplace allowlist." },
+  { id: "N002", tier: "advisory", target: "ERC721/1155.setApprovalForAll()", assertion: "approved=true granted to a recognized marketplace operator (logged, low severity)." },
+  { id: "A001", tier: "advisory", target: "Ownable.transferOwnership()", assertion: "OwnershipTransferred observed with no expected-owner baseline configured." },
+  { id: "A002", tier: "advisory", target: "Pausable", assertion: "Paused or Unpaused event emitted." },
+  { id: "A003", tier: "advisory", target: "Ownable.transferOwnership()", assertion: "Ownership moved away from the configured expected owner." },
+  { id: "C001", tier: "advisory", target: "Registered Guardian contract", assertion: "Call matched a hand-picked critical function for that specific contract." },
+  { id: "T001", tier: "advisory", target: "ERC20.transfer()", assertion: "Zero-value transfer from an address crafted to resemble a known contact (address poisoning)." },
+  { id: "T002", tier: "advisory", target: "ERC20.transfer()", assertion: "Zero-value transfer, no lookalike match (routine dust)." },
+  { id: "EIP1967", tier: "simulation", target: "Any contract (forked-state simulation)", assertion: "State-diff simulation detects a write to the EIP-1967 implementation slot — proxy upgrade. Requires the RPC endpoint to support trace_call; falls back to unverified if it doesn't." },
+];
 
 // Known function selectors this pre-signing checker can actually reason
 // about. Anything else (arbitrary contract calls, unknown selectors) falls
@@ -182,6 +200,25 @@ export function startServer(deps = {}) {
   const app = express();
   app.use(cors());
   app.use(express.json());
+
+  // Optional — the full hard-floor -> simulation -> AI advisory -> co-sign
+  // pipeline. Requires ORACLE_PRIVATE_KEY (a dedicated key, see
+  // validationOracle.js header comment) and RPC_URL. Without it, the
+  // /api/oracle/* routes below return 503 rather than silently degrading
+  // to a fake result.
+  let oracle = null;
+  if (process.env.ORACLE_PRIVATE_KEY) {
+    try {
+      oracle = new ValidationOracle({
+        oraclePrivateKey: process.env.ORACLE_PRIVATE_KEY,
+        rpcUrl: process.env.RPC_URL,
+      });
+    } catch (err) {
+      console.error("[server] Failed to initialize ValidationOracle:", err.message);
+    }
+  } else {
+    console.warn("[server] ORACLE_PRIVATE_KEY not set — /api/oracle/* routes will return 503.");
+  }
 
   app.get("/alerts", (req, res) => res.json(getAlerts()));
   app.get("/guardians", (req, res) => res.json(getGuardians()));
@@ -363,6 +400,42 @@ export function startServer(deps = {}) {
     }
   });
 
+  // --- Policy rule catalog: real matched_rules codes, for the dashboard's
+  // rule list panel. Not aspirational — kept in sync with ruleEngine.js.
+  app.get("/api/policy/rules", (req, res) => res.json(POLICY_RULE_CATALOG));
+
+  // --- Oracle evaluate: the full hard-floor -> simulation -> AI advisory
+  // -> co-sign pipeline (validationOracle.js). Used by the dashboard's
+  // "Simulate payload" buttons and by the landing page's policy debugger —
+  // both send a real proposed call and get back a real decision, not a
+  // scripted one. No real bundler is involved, so userOpHash here is a
+  // synthetic hash of the request body, good enough for a sandboxed check
+  // but not a real ERC-4337 UserOperation hash.
+  app.post("/api/oracle/evaluate", async (req, res) => {
+    if (!oracle) {
+      return res.status(503).json({ error: "Oracle not configured on this server — set ORACLE_PRIVATE_KEY and RPC_URL." });
+    }
+    const { sender, to, data, value, context } = req.body || {};
+    if (!sender || !to) return res.status(400).json({ error: "sender and to are required" });
+
+    const userOpHash = keccak256(toUtf8Bytes(JSON.stringify({ sender, to, data: data || "0x", value: value || "0", t: Date.now() })));
+
+    try {
+      const result = await oracle.evaluate({
+        userOpHash,
+        sender,
+        to,
+        data: data || "0x",
+        value: value ? BigInt(value) : 0n,
+        context: context || {},
+      });
+      res.json({ userOpHash, ...result });
+    } catch (err) {
+      console.error("[api/oracle/evaluate] Error:", err.message);
+      res.status(500).json({ error: "Oracle evaluation failed", detail: err.message });
+    }
+  });
+
   app.listen(port, () => {
     console.log(`ShieldGuard API on http://localhost:${port}`);
     console.log(`  GET /alerts    — all events`);
@@ -373,6 +446,8 @@ export function startServer(deps = {}) {
     console.log(`  GET /api/user/* — personal dashboard (?address=0x...)`);
     console.log(`  POST /api/validate — SDK Wrapper pre-signing check`);
     console.log(`  POST /api/intent/build — Intent Router: build + validate a tx from a high-level intent`);
+    console.log(`  GET  /api/policy/rules — real rule catalog (P/N/A/C/T codes)`);
+    console.log(`  POST /api/oracle/evaluate — hard-floor -> simulation -> AI -> co-sign (needs ORACLE_PRIVATE_KEY)`);
     console.log(`  POST /monitor, /monitor/private, /monitor/admin — add contracts (wired by listener.js)`);
   });
 

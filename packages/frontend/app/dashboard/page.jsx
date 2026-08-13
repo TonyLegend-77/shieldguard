@@ -1,377 +1,414 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import Link from 'next/link';
-import {
-  Shield,
-  Radio,
-  ChevronDown,
-  PenLine,
-  Link2,
-  WifiOff,
-  ExternalLink,
-  Loader2,
-  BadgeCheck,
-  ArrowLeft,
-} from 'lucide-react';
-import { useWallet } from '../lib/wallet';
-import WalletBar from '../components/WalletBar';
-import MyContracts from '../components/MyContracts';
-import ConnectionsPanel from '../components/ConnectionsPanel';
-import SdkTester from '../components/SdkTester';
+import { useEffect, useState } from 'react';
+import { Shield, Search, Network, GitBranch, Microscope, Plus, Zap } from 'lucide-react';
+import TopologyGraph from '../components/os/TopologyGraph';
+import CommandPalette from '../components/os/CommandPalette';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const DEMO_SENDER = '0x71C7656EC7ab88b098defB751B7401B5f6d8976';
 
-const SEVERITY = {
-  LOW: { label: 'NOMINAL', text: 'text-nominal', border: 'border-nominal' },
-  MEDIUM: { label: 'ELEVATED', text: 'text-info', border: 'border-info' },
-  HIGH: { label: 'HIGH', text: 'text-caution', border: 'border-caution' },
-  CRITICAL: { label: 'CRITICAL', text: 'text-critical', border: 'border-critical' },
+// Real calldata, same as the landing page's policy debugger. See that
+// component's header comment for how these were built.
+const MAX_UINT256_HEX = 'f'.repeat(64);
+const pad = (addr) => addr.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+const PAYLOADS = {
+  uniswap: {
+    to: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+    data: '0x414bf389' + '00'.repeat(160),
+    label: 'Verified DEX swap',
+  },
+  exploit: {
+    to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    data: '0x095ea7b3' + pad('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA9604') + MAX_UINT256_HEX,
+    label: 'Unlimited spender approval',
+  },
 };
 
-function short(addr) {
-  if (!addr) return '—';
-  if (addr.length <= 12) return addr;
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
+// Agent swarm has no real session-tracking backend yet, this stays
+// explicitly labeled demo data until that's built.
+const AGENTS = [
+  { name: 'Arbitrage-Bot-Alpha', session: '0x88f2...3b10', status: 'PASSIVE_LOOKUP', tone: 'emerald' },
+  { name: 'Rebalancing-Agent-Beta', session: '0x14a9...e8d2', status: 'EVALUATING_OP', tone: 'amber', pulse: true },
+  { name: 'Treasury-Manager-Gamma', session: '0xd90e...7f4a', status: 'STANDBY', tone: 'zinc' },
+];
 
-function timeAgo(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
+const TONE_TEXT = { emerald: 'text-emerald-400', amber: 'text-amber-400', zinc: 'text-zinc-500' };
 
-export default function DashboardPage() {
-  const wallet = useWallet();
-  const [health, setHealth] = useState(null);
-  const [guardians, setGuardians] = useState([]);
-  const [alerts, setAlerts] = useState([]);
-  const [online, setOnline] = useState(false);
-  const [expanded, setExpanded] = useState(null);
-  const [verifyState, setVerifyState] = useState({}); // hash -> { loading, data, error }
-
-  const poll = useCallback(async () => {
-    try {
-      const [h, g, a] = await Promise.all([
-        fetch(`${API}/health`).then((r) => r.json()),
-        fetch(`${API}/guardians`).then((r) => r.json()),
-        fetch(`${API}/alerts`).then((r) => r.json()),
-      ]);
-      setHealth(h);
-      setGuardians(g);
-      setAlerts(a);
-      setOnline(true);
-    } catch {
-      setOnline(false);
-    }
-  }, []);
+export default function Dashboard() {
+  const [circuitArmed, setCircuitArmed] = useState(true);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [rules, setRules] = useState([]);
+  const [rulesError, setRulesError] = useState(null);
+  const [graphMode, setGraphMode] = useState('idle');
+  const [canvasStatus, setCanvasStatus] = useState({ text: 'Idle — awaiting UserOp payload', tone: 'text-zinc-500' });
+  const [interp, setInterp] = useState({
+    floor: { text: 'IDLE', tone: 'text-zinc-500' },
+    ai: { text: 'IDLE', tone: 'text-zinc-500' },
+    simulation: { text: 'IDLE', tone: 'text-zinc-500' },
+  });
+  const [footerLog, setFooterLog] = useState('System ready. Listening for UserOps across active agents...');
+  const [coSign, setCoSign] = useState({ status: 'idle', sig: null });
 
   useEffect(() => {
-    poll();
-    const id = setInterval(poll, 5000);
-    return () => clearInterval(id);
-  }, [poll]);
+    fetch(`${API}/api/policy/rules`)
+      .then((r) => r.json())
+      .then(setRules)
+      .catch((err) => setRulesError(err.message));
+  }, []);
 
-  const runVerify = async (hash) => {
-    setVerifyState((s) => ({ ...s, [hash]: { loading: true } }));
+  function compileRule(text) {
+    // Local-only preview. There's no NL-to-rule compiler backend yet —
+    // this adds a card to the list but does not change what
+    // /api/oracle/evaluate actually enforces.
+    setRules((prev) => [...prev, { id: `PREVIEW-${prev.length}`, tier: 'preview', target: null, assertion: text }]);
+    setFooterLog(`Rule drafted locally (preview only, not enforced): "${text.slice(0, 48)}${text.length > 48 ? '…' : ''}"`);
+    setPaletteOpen(false);
+  }
+
+  async function runSimulation(mode) {
+    setGraphMode(mode);
+    setCanvasStatus({ text: 'Calling /api/oracle/evaluate…', tone: 'text-zinc-400' });
+    setInterp({
+      floor: { text: 'RUNNING', tone: 'text-zinc-400' },
+      ai: { text: 'RUNNING', tone: 'text-zinc-400' },
+      simulation: { text: 'RUNNING', tone: 'text-zinc-400' },
+    });
+    const payload = PAYLOADS[mode];
     try {
-      const res = await fetch(`${API}/verify/${hash}`);
-      const data = await res.json();
-      setVerifyState((s) => ({ ...s, [hash]: { loading: false, data } }));
-    } catch (err) {
-      setVerifyState((s) => ({ ...s, [hash]: { loading: false, error: err.message } }));
-    }
-  };
+      const res = await fetch(`${API}/api/oracle/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender: DEMO_SENDER, to: payload.to, data: payload.data, value: '0', context: { tokenName: payload.label } }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
 
-  const flagged = alerts.filter((a) => a.severity !== 'LOW').length;
-  const signed = alerts.filter((a) => a.signed).length;
-  const anchored = alerts.filter((a) => a.anchored).length;
+      const blocked = json.decision === 'BLOCK';
+      setCanvasStatus({
+        text: `${json.decision} — ${json.reason}`,
+        tone: blocked ? 'text-rose-400' : 'text-emerald-400',
+      });
+      setInterp({
+        floor: {
+          text: json.stage === 'hard_floor' && blocked ? 'FAIL' : 'PASS',
+          tone: json.stage === 'hard_floor' && blocked ? 'text-rose-400' : 'text-emerald-400',
+        },
+        simulation: {
+          text: json.simulationMode ? json.simulationMode.toUpperCase() : 'SKIPPED',
+          tone:
+            json.stage === 'simulation' && blocked
+              ? 'text-rose-400'
+              : json.simulationMode === 'eth_call_fallback' || json.simulationMode === 'simulation_failed'
+              ? 'text-amber-400'
+              : 'text-emerald-400',
+        },
+        ai: {
+          text: json.stage === 'ai_advisory' ? (blocked ? 'FLAGGED' : 'REVIEWED') : json.stage === 'hard_floor' ? 'SKIPPED' : 'PASS',
+          tone: json.stage === 'ai_advisory' && blocked ? 'text-rose-400' : 'text-emerald-400',
+        },
+      });
+      setFooterLog(`${json.decision} at stage "${json.stage}": ${json.reason}`);
+
+      if (!blocked && json.oracleSignature) {
+        setCoSign({ status: 'done', sig: `${json.oracleSignature.slice(0, 40)}... (valid until ${json.validUntil})` });
+      }
+    } catch (err) {
+      setCanvasStatus({ text: `Request failed: ${err.message}`, tone: 'text-amber-400' });
+      setFooterLog(`Oracle call failed: ${err.message}`);
+    }
+  }
+
+  async function coSignPayload() {
+    setCoSign({ status: 'signing', sig: null });
+    await runSimulation('uniswap');
+    setCoSign((prev) => (prev.status === 'signing' ? { status: 'idle', sig: null } : prev));
+  }
+
 
   return (
-    <main className="min-h-screen bg-paper">
-      <div className="max-w-6xl mx-auto px-5 py-8 md:py-12">
+    <div className="sg-os min-h-screen flex flex-col justify-between bg-zinc-950 text-zinc-300 selection:bg-zinc-800 selection:text-emerald-400">
+      <style jsx global>{`
+        .sg-os {
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .sg-os .font-mono {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+        }
+        .sg-os .font-sans {
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+      `}</style>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onCompile={compileRule} />
 
-        <header className="flex items-center justify-between border-b border-line pb-5 mb-8 animate-fadeUp">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-dim hover:text-ink transition-colors">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <Shield className="w-6 h-6 text-accent shrink-0" strokeWidth={1.5} />
-            <div>
-              <h1 className="font-display text-base md:text-lg text-ink">
-                ShieldGuard
-              </h1>
-              <p className="font-mono text-[11px] text-dim tracking-wide mt-0.5">
-                BOT CHAIN · TESTNET 968
-              </p>
+      {/* Top status bar */}
+      <header className="border-b border-zinc-800/80 bg-zinc-950 px-4 py-2 text-xs font-mono text-zinc-400 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-5 h-5 rounded bg-zinc-100 text-zinc-950 flex items-center justify-center">
+              <Shield className="w-3 h-3" strokeWidth={2.5} />
             </div>
+            <span className="font-semibold text-zinc-100 tracking-tight font-sans">ShieldGuard OS</span>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 font-mono text-[11px] tracking-wide">
-              {online ? (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-nominal animate-pulseDot" />
-                  <span className="text-nominal">LIVE</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-3.5 h-3.5 text-critical" />
-                  <span className="text-critical">OFFLINE</span>
-                </>
-              )}
-            </div>
-            <WalletBar wallet={wallet} />
+          <span className="text-zinc-700">|</span>
+          <div className="hidden lg:flex items-center space-x-3 text-[11px]">
+            <span className="flex items-center space-x-1 text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Helios light client: syncing</span>
+            </span>
+            <span className="text-zinc-700">&bull;</span>
+            <span className="text-zinc-400">
+              Rule engine: <strong className="text-zinc-200 font-normal">v2 live</strong>
+            </span>
           </div>
-        </header>
+        </div>
 
-        {wallet.address && !wallet.wrongChain && (
-          <div className="mb-5">
-            <MyContracts wallet={wallet} />
-          </div>
-        )}
-
-        {wallet.address && !wallet.wrongChain && (
-          <div className="mb-5">
-            <ConnectionsPanel wallet={wallet} />
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-5">
-
-          <section
-            className="border border-line bg-surface rounded-xl overflow-hidden animate-fadeUp"
-            style={{ animationDelay: '80ms' }}
+        <div className="flex items-center space-x-3 text-xs">
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 flex items-center space-x-2 font-mono text-[11px]"
           >
-            <div className="border-b border-line px-4 py-3">
-              <h2 className="font-display text-sm text-ink">
-                Guardians
-              </h2>
-            </div>
+            <Search className="w-3 h-3 text-zinc-500" />
+            <span>NL Compiler</span>
+            <kbd className="px-1 py-0.5 bg-zinc-950 border border-zinc-800 rounded text-[9px] text-zinc-400">⌘K</kbd>
+          </button>
+          <button
+            onClick={() => setCircuitArmed((v) => !v)}
+            className={`px-2.5 py-1 rounded border font-mono text-[11px] flex items-center space-x-1.5 ${
+              circuitArmed
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
+                : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${circuitArmed ? 'bg-rose-500' : 'bg-zinc-500'}`} />
+            <span>Circuit breaker: {circuitArmed ? 'ARMED' : 'DISARMED'}</span>
+          </button>
+        </div>
+      </header>
 
-            <div className="divide-y divide-line">
-              {guardians.length === 0 && (
-                <p className="font-mono text-xs text-faint px-4 py-6">
-                  {online ? 'No contracts registered yet.' : 'Awaiting connection to sentinel.'}
-                </p>
-              )}
-              {guardians.map((g) => (
-                <div key={g.id} className="px-4 py-4">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-medium text-ink">{g.name}</span>
-                      {g.tier && (
-                        <span className="font-mono text-[9px] tracking-wide px-1.5 py-0.5 rounded-full bg-accentSoft text-accent">
-                          {g.tier.toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <span className="flex items-center gap-1.5 text-[10px] font-mono text-nominal">
-                      <Radio className="w-3 h-3 animate-pulseDot" />
-                      SCANNING
-                    </span>
+      {/* Workspace */}
+      <main className="flex-1 max-w-[1700px] w-full mx-auto p-3 lg:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+        {/* Column 1: agent swarm + policy rules */}
+        <section className="lg:col-span-3 flex flex-col space-y-4">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 space-y-3 font-mono text-xs">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+              <span className="font-semibold text-zinc-200 flex items-center space-x-1.5">
+                <Network className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Active agent swarm</span>
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 text-[10px]" title="No session-tracking backend yet — see chat notes">
+                DEMO DATA
+              </span>
+            </div>
+            <div className="space-y-2 text-[11px]">
+              {AGENTS.map((a) => (
+                <div key={a.name} className="p-2 rounded bg-zinc-950 border border-zinc-800 flex justify-between items-center">
+                  <div>
+                    <div className="text-zinc-200 font-medium">{a.name}</div>
+                    <div className="text-zinc-500 text-[10px]">Session: {a.session}</div>
                   </div>
-                  <p className="font-mono text-[11px] text-dim break-all mb-2">
-                    {short(g.address)}
-                  </p>
-                  {g.monitorCalls && g.criticalFunctions?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      {g.criticalFunctions.map((fn) => (
-                        <span
-                          key={fn}
-                          className="font-mono text-[9px] px-1.5 py-0.5 rounded-full bg-surfaceAlt text-dim border border-line"
-                        >
-                          {fn}()
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex gap-4 font-mono text-[11px]">
-                    <span className="text-dim">
-                      SCANNED <span className="text-ink">{g.scanned}</span>
-                    </span>
-                    <span className="text-dim">
-                      FLAGGED{' '}
-                      <span className={g.flagged > 0 ? 'text-caution' : 'text-ink'}>
-                        {g.flagged}
-                      </span>
-                    </span>
-                  </div>
+                  <span className={`text-[10px] ${TONE_TEXT[a.tone]} ${a.pulse ? 'animate-pulse' : ''}`}>{a.status}</span>
                 </div>
               ))}
             </div>
-          </section>
+          </div>
 
-          <section
-            className="border border-line bg-surface rounded-xl overflow-hidden animate-fadeUp"
-            style={{ animationDelay: '160ms' }}
-          >
-            <div className="border-b border-line px-4 py-3">
-              <h2 className="font-display text-sm text-ink">
-                Activity — every flagged event, receipted
-              </h2>
-            </div>
-
-            <div className="p-3 space-y-3 max-h-[560px] overflow-y-auto">
-              {alerts.length === 0 && (
-                <div className="px-5 py-10 text-center">
-                  <p className="font-mono text-xs text-faint">
-                    No events logged yet.
-                  </p>
-                </div>
-              )}
-
-              {alerts.map((a) => {
-                const sev = SEVERITY[a.severity] || SEVERITY.LOW;
-                const isOpen = expanded === a.id;
-                const v = a.hash ? verifyState[a.hash] : null;
-
-                return (
-                  <div key={a.id} className={`receipt border-l-2 ${sev.border}`}>
-                    <button
-                      onClick={() => setExpanded(isOpen ? null : a.id)}
-                      className="w-full flex items-start justify-between gap-3 text-left px-4 py-3.5"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className={`font-mono text-[10px] tracking-wide ${sev.text}`}>
-                            [{sev.label}]
-                          </span>
-                          <span className="font-mono text-xs text-ink">{a.token}</span>
-                          {a.signed && <PenLine className="w-3 h-3 text-dim" />}
-                          {a.anchored && <Link2 className="w-3 h-3 text-nominal" />}
-                        </div>
-                        <p className="font-sans text-[13px] text-body leading-snug">
-                          {a.reason}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                        <span className="font-mono text-[10px] text-faint whitespace-nowrap">
-                          {timeAgo(a.time)}
-                        </span>
-                        <ChevronDown
-                          className={`w-3.5 h-3.5 text-faint transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                        />
-                      </div>
-                    </button>
-
-                    {isOpen && (
-                      <div className="receipt-perforation mx-4 pt-3 pb-4 font-mono text-[11px] text-dim space-y-1.5">
-                        <p>FROM &nbsp; {short(a.from)}</p>
-                        <p>TO &nbsp;&nbsp;&nbsp; {short(a.to)}</p>
-                        {a.rules?.length > 0 && <p>RULES &nbsp; {a.rules.join(', ')}</p>}
-                        {a.verdict && <p className="text-ink">{a.verdict}</p>}
-                        {a.hash && <p className="break-all">HASH &nbsp; {a.hash}</p>}
-
-                        {a.anchored && a.hash && (
-                          <div className="pt-2">
-                            {!v && (
-                              <button
-                                onClick={() => runVerify(a.hash)}
-                                className="inline-flex items-center gap-1.5 text-accent border border-accent/40 rounded-full px-2.5 py-1 hover:bg-accentSoft transition-colors"
-                              >
-                                <BadgeCheck className="w-3 h-3" />
-                                VERIFY ON-CHAIN
-                              </button>
-                            )}
-
-                            {v?.loading && (
-                              <span className="inline-flex items-center gap-1.5 text-dim">
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                Querying ReceiptRegistry...
-                              </span>
-                            )}
-
-                            {v?.data?.chain?.anchored && (
-                              <div className="bg-surfaceAlt border border-nominal/30 rounded-lg px-3 py-2.5 space-y-1.5">
-                                <p className="text-nominal flex items-center gap-1.5">
-                                  <BadgeCheck className="w-3 h-3" />
-                                  CONFIRMED ON-CHAIN
-                                </p>
-                                {(() => {
-                                  let onChainMsg = null;
-                                  try {
-                                    const parsed = JSON.parse(v.data.chain.metadata);
-                                    onChainMsg = parsed.verdict || parsed.reason || null;
-                                  } catch {
-                                    onChainMsg = v.data.chain.metadata;
-                                  }
-                                  return onChainMsg ? (
-                                    <p className="text-ink font-sans normal-case leading-snug pb-1 border-b border-line">
-                                      {onChainMsg}
-                                    </p>
-                                  ) : null;
-                                })()}
-                                <p>SUBMITTER &nbsp; {short(v.data.chain.submitter)}</p>
-                                <p>
-                                  TIMESTAMP &nbsp;
-                                  {new Date(v.data.chain.timestamp * 1000).toLocaleString()}
-                                </p>
-                                <a
-                                  href={v.data.chain.explorerUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-info hover:underline pt-1"
-                                >
-                                  View ReceiptRegistry on explorer
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-                              </div>
-                            )}
-
-                            {v?.data && !v.data.chain?.anchored && (
-                              <p className="text-caution">
-                                Not found on-chain yet — anchoring transaction may still be confirming.
-                              </p>
-                            )}
-
-                            {v?.error && (
-                              <p className="text-critical">Verification failed: {v.error}</p>
-                            )}
-                          </div>
-                        )}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 flex-1 flex flex-col justify-between font-mono text-xs space-y-3">
+            <div>
+              <div className="flex justify-between items-center border-b border-zinc-800 pb-2 mb-2">
+                <span className="font-semibold text-zinc-200 flex items-center space-x-1.5">
+                  <GitBranch className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Active policy rules</span>
+                </span>
+                <span className="text-[10px] text-zinc-500">Live from /api/policy/rules</span>
+              </div>
+              <div className="space-y-2 text-[11px] max-h-[380px] overflow-y-auto pr-1">
+                {rulesError && (
+                  <div className="p-2 rounded bg-rose-950/20 border border-rose-900/40 text-rose-400 text-[10px]">
+                    Could not load rules: {rulesError}
+                  </div>
+                )}
+                {rules.map((r) => (
+                  <div
+                    key={r.id}
+                    className={`p-2 rounded bg-zinc-950 border ${
+                      r.tier === 'preview' ? 'border-cyan-500/30 bg-cyan-950/10' : 'border-zinc-800/80'
+                    }`}
+                  >
+                    <div className={`font-semibold mb-0.5 ${r.tier === 'preview' ? 'text-cyan-400' : 'text-purple-400'}`}>
+                      {r.id} {r.tier === 'preview' ? '(preview, not enforced)' : `— ${r.tier}`}
+                    </div>
+                    {r.target && (
+                      <div className="text-zinc-400">
+                        Target: <span className="text-zinc-200">{r.target}</span>
                       </div>
                     )}
+                    <div className="text-zinc-500 text-[10px] mt-1">{r.assertion}</div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </section>
-        </div>
-
-        <div className="mt-5">
-          <SdkTester wallet={wallet} />
-        </div>
-
-        <footer
-          className="mt-5 border border-line bg-surface rounded-xl px-5 py-4 flex flex-wrap items-center gap-x-8 gap-y-3 animate-fadeUp"
-          style={{ animationDelay: '220ms' }}
-        >
-          <Stat label="FLAGGED" value={flagged} accent={flagged > 0 ? 'text-caution' : 'text-ink'} />
-          <Stat label="SIGNED" value={signed} />
-          <Stat label="ANCHORED" value={anchored} accent="text-nominal" />
-          <Stat label="TOTAL" value={alerts.length} />
-          <div className="ml-auto font-mono text-[11px] text-faint">
-            SIGNER &nbsp;{short(health?.signerAddress)}
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="w-full py-2 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-sans transition-colors flex items-center justify-center space-x-2"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Draft new rule (preview only)</span>
+            </button>
           </div>
-        </footer>
+        </section>
 
-        <p className="mt-4 font-mono text-[10px] text-faint text-center">
-          46 threat patterns · rule engine v2 · policy engine v1 · SDK pre-signing firewall live
-        </p>
-      </div>
-    </main>
-  );
-}
+        {/* Column 2: topology graph + payload stream */}
+        <section className="lg:col-span-6 flex flex-col space-y-4">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 relative flex flex-col justify-between min-h-[380px] overflow-hidden">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2 z-10">
+              <div className="flex items-center space-x-2">
+                <Network className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="font-mono text-xs font-semibold text-zinc-100">Live EVM state topology</span>
+              </div>
+              <div className="flex items-center space-x-3 text-[11px] font-mono">
+                <span className="text-zinc-500">
+                  Fork: <strong className="text-zinc-300 font-normal">Mainnet #21940112</strong>
+                </span>
+              </div>
+            </div>
 
-function Stat({ label, value, accent = 'text-ink' }) {
-  return (
-    <div>
-      <p className="font-mono text-[10px] text-faint tracking-wide mb-0.5">{label}</p>
-      <p className={`font-mono text-lg font-medium ${accent}`}>{value}</p>
+            <div className="relative w-full h-[280px] my-2">
+              <TopologyGraph mode={graphMode} />
+              <div className="absolute bottom-2 left-2 px-2 py-1 bg-zinc-950/80 border border-zinc-800 rounded font-mono text-[10px] text-zinc-400">
+                Nodes: <span className="text-emerald-400">Agent account</span> →{' '}
+                <span className="text-cyan-400">ShieldGuard module</span> → <span className="text-purple-400">Target contract</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 font-mono text-xs z-10">
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => runSimulation('uniswap')}
+                  className="px-2.5 py-1 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-zinc-300 text-[11px]"
+                >
+                  Simulate swap payload
+                </button>
+                <button
+                  onClick={() => runSimulation('exploit')}
+                  className="px-2.5 py-1 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-rose-400 text-[11px]"
+                >
+                  Simulate hijack payload
+                </button>
+              </div>
+              <span className={`${canvasStatus.tone} text-[11px]`}>{canvasStatus.text}</span>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 font-mono text-xs space-y-2">
+            <div className="flex justify-between items-center text-zinc-400">
+              <span>Inbound UserOp payload stream</span>
+              <span className="text-[10px] text-zinc-500">example format, not a live bundler feed</span>
+            </div>
+            <div className="p-3 bg-zinc-950 rounded border border-zinc-800/90 text-[11px] text-zinc-300 space-y-1 overflow-x-auto">
+              <div>
+                <span className="text-zinc-500">sender:</span>{' '}
+                <span className="text-emerald-300">0x742d35Cc6634C0532925a3b844Bc454e4438f44e</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">callData:</span>{' '}
+                <span className="text-zinc-400">0x5ae40101000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48...</span>
+              </div>
+              <div className="flex justify-between text-zinc-500 pt-1 border-t border-zinc-900 text-[10px]">
+                <span>maxFeePerGas: 18.2 Gwei</span>
+                <span>verificationGasLimit: 120,000</span>
+                <span>nonce: 42</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Column 3: interpretability + co-sign */}
+        <section className="lg:col-span-3 flex flex-col space-y-4">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 space-y-3 font-mono text-xs">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+              <span className="font-semibold text-zinc-200 flex items-center space-x-1.5">
+                <Microscope className="w-3.5 h-3.5 text-amber-400" />
+                <span>Interpretability matrix</span>
+              </span>
+              <span className="text-[10px] text-amber-400/90 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                REASONING TRACE
+              </span>
+            </div>
+            <div className="space-y-2 text-[11px]">
+              <div className="p-2 rounded bg-zinc-950 border border-zinc-800">
+                <div className="text-zinc-400 flex justify-between">
+                  <span>Hard policy floor</span>
+                  <span className={`font-bold ${interp.floor.tone}`}>{interp.floor.text}</span>
+                </div>
+                <div className="text-zinc-500 text-[10px] mt-0.5">Deterministic rule checks, no AI involved.</div>
+              </div>
+              <div className="p-2 rounded bg-zinc-950 border border-zinc-800">
+                <div className="text-zinc-400 flex justify-between">
+                  <span>Forked-state simulation</span>
+                  <span className={`font-bold ${interp.simulation.tone}`}>{interp.simulation.text}</span>
+                </div>
+                <div className="text-zinc-500 text-[10px] mt-0.5">EIP-1967 slot + balance-delta check.</div>
+              </div>
+              <div className="p-2 rounded bg-zinc-950 border border-zinc-800">
+                <div className="text-zinc-400 flex justify-between">
+                  <span>AI advisory</span>
+                  <span className={`font-bold ${interp.ai.tone}`}>{interp.ai.text}</span>
+                </div>
+                <div className="text-zinc-500 text-[10px] mt-0.5">Payload compared against expected behavior.</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 flex-1 flex flex-col justify-between font-mono text-xs space-y-3">
+            <div>
+              <div className="flex justify-between items-center border-b border-zinc-800 pb-2 mb-2">
+                <span className="font-semibold text-zinc-200">Oracle co-signature</span>
+                <span className="text-[10px] text-zinc-500">ECDSA</span>
+              </div>
+              <div className="p-2.5 rounded bg-zinc-950 border border-zinc-800 space-y-2">
+                <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Status</div>
+                <div className="text-zinc-300 text-[11px]">
+                  {coSign.status === 'idle' && 'Awaiting validation trace...'}
+                  {coSign.status === 'signing' && 'Signing UserOp hash...'}
+                  {coSign.status === 'done' && 'Co-signature issued.'}
+                </div>
+                {coSign.sig && (
+                  <div className="text-[10px] text-zinc-500 break-all font-mono bg-zinc-900 p-1.5 rounded border border-zinc-800/60">
+                    {coSign.sig}
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={coSignPayload}
+              disabled={coSign.status === 'signing'}
+              className="w-full py-2 rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-medium font-sans transition-colors text-xs flex items-center justify-center space-x-2 disabled:opacity-60"
+            >
+              <Zap className="w-3 h-3" />
+              <span>{coSign.status === 'signing' ? 'Signing…' : 'Generate co-signature'}</span>
+            </button>
+          </div>
+        </section>
+      </main>
+
+      {/* Footer log */}
+      <footer className="border-t border-zinc-800/80 bg-zinc-950 px-4 py-2 font-mono text-xs text-zinc-500 flex flex-col md:flex-row justify-between items-center gap-2">
+        <div className="flex items-center space-x-3">
+          <span className="flex items-center space-x-1 text-zinc-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>Oracle co-signer node</span>
+          </span>
+          <span className="text-zinc-800">|</span>
+          <span className="text-zinc-400">{footerLog}</span>
+        </div>
+        <div className="flex items-center space-x-4 text-[11px]">
+          <span>
+            Helios light client: <strong className="text-zinc-300 font-normal">syncing</strong>
+          </span>
+        </div>
+      </footer>
     </div>
   );
 }

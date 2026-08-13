@@ -94,7 +94,7 @@ export class ValidationOracle {
       if (proxyUpgrade && !(criticalMatch && context.allowProxyUpgrade)) {
         const reason = `Simulation detected a write to the EIP-1967 implementation slot on ${proxyUpgrade.contract} — proxy upgrade`;
         this._alert("transaction.blocked", { sender, to, selector, reason, stage: "simulation", context });
-        return { decision: "BLOCK", reason, stage: "simulation" };
+        return { decision: "BLOCK", reason, stage: "simulation", simulationMode: simResult.mode };
       }
     }
 
@@ -120,17 +120,18 @@ export class ValidationOracle {
     if (verdict?.recommendation === "REVOKE_IMMEDIATELY") {
       const reason = verdict.summary || "AI advisory flagged this transaction as critical risk";
       this._alert("transaction.blocked", { sender, to, selector, reason, stage: "ai_advisory", context });
-      return { decision: "BLOCK", reason, stage: "ai_advisory" };
+      return { decision: "BLOCK", reason, stage: "ai_advisory", simulationMode: simResult.mode };
     }
 
     if (verdict?.recommendation === "REVIEW_AND_REVOKE") {
       const reason = verdict.summary || "AI advisory flagged this transaction for review";
       this._alert("transaction.flagged", { sender, to, selector, reason, stage: "ai_advisory", context });
-      return { decision: "FLAG_REVIEW", reason, stage: "ai_advisory" };
+      return { decision: "FLAG_REVIEW", reason, stage: "ai_advisory", simulationMode: simResult.mode };
     }
 
     // --- Stage 4: ALLOW — issue the co-signature ---
-    return this._coSign(userOpHash);
+    const coSigned = await this._coSign(userOpHash);
+    return { ...coSigned, simulationMode: simResult.mode };
   }
 
   _evaluateHardFloor({ to, data, criticalMatch }) {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Shield, Eye, FileSignature, KeyRound, ArrowRight, Radio } from 'lucide-react';
+import PolicyDebugger from './components/PolicyDebugger';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -156,6 +157,8 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      <PolicyDebugger />
 
       {/* Live proof */}
       <section className="bg-surfaceAlt py-12">
