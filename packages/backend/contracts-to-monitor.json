@@ -1,0 +1,268 @@
+{
+  "tokens": [
+    {
+      "address": "0xF704Ad4be6d75C62550571f3EAd025efe7CA30D1",
+      "name": "Wrapped BOT (WBOT)",
+      "symbol": "WBOT",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0x75edC93310420fe3",
+      "name": "Tether USD (USDT)",
+      "symbol": "USDT",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0xAfea2A5e0587615ceD6972e271E5bfe8622ebcA2",
+      "name": "BOHR Wrapped Tether",
+      "symbol": "bwUSDT",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0x6916414F7e390af45c29c89b0aC1Aa79c568D09D",
+      "name": "BOHR Wrapped ETH",
+      "symbol": "bwETH",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0x9D55Fba17a37AF9f7ED6d073b2A533Ed3Ed72C03",
+      "name": "BOHR Wrapped USD Coin",
+      "symbol": "bwUSDC",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0xDAca65D8Dd2621F0e976648386495Be1151A7177",
+      "name": "Tether USD (tUSDT)",
+      "symbol": "tUSDT",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0xe6Bd650807ddEdd7Aecdd5083F6bf7ECB6bBCE58",
+      "name": "Mock USDT",
+      "symbol": "USDT",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0x0000000000000000000000000000000000002005",
+      "name": "BOT Governance Token",
+      "symbol": "BOT",
+      "tier": "admin",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0xd93ad23F751C6E6C",
+      "name": "Money",
+      "symbol": "MONEY",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0xE41F03906F274B4f8f20afFdDFC0B4139A2Fe85b",
+      "name": "Money",
+      "symbol": "MONEY",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0xBca241D71854da5Bf6E59591701995AB935f2E74",
+      "name": "BOT V2 LP Token",
+      "symbol": "BOT-LP",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0x4AFc633E7B6bEB8e552ccddbE06Cca3754991E9A",
+      "name": "Stake Val003 Credit",
+      "symbol": "sVAL003",
+      "tier": "private",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": true,
+      "criticalFunctions": ["stake", "unstake", "claim"]
+    },
+    {
+      "address": "0xf77c188aBFf5A30D560c4242BfdedDb5a33dEa0E",
+      "name": "Rocket Doge",
+      "symbol": "RKTDOGE",
+      "tier": "public",
+      "monitorApprovals": false,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0x83c56D73C2418F",
+      "name": "Rocket Doge",
+      "symbol": "RKTDOGE",
+      "tier": "public",
+      "monitorApprovals": false,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    }
+  ],
+  "contracts": [
+    {
+      "address": "0x1B29765AE3a01551B1374b61B795B8D414BBE78a",
+      "name": "MultiSigWallet",
+      "tier": "admin",
+      "monitorApprovals": false,
+      "monitorTransfers": true,
+      "monitorCalls": true,
+      "criticalFunctions": ["submitTransaction", "confirmTransaction", "executeTransaction", "revokeConfirmation"]
+    },
+    {
+      "address": "0x8e0A44464b2459414edD900bD8D68ac923Eb53de",
+      "name": "MultiSigWallet",
+      "tier": "admin",
+      "monitorApprovals": false,
+      "monitorTransfers": true,
+      "monitorCalls": true,
+      "criticalFunctions": ["submitTransaction", "confirmTransaction", "executeTransaction"]
+    },
+    {
+      "address": "0x33A4ad07A724A8b300b80bFa0B0B451F3F2E50e6",
+      "name": "CompanyWallet",
+      "tier": "admin",
+      "monitorApprovals": false,
+      "monitorTransfers": true,
+      "monitorCalls": true,
+      "criticalFunctions": ["transfer", "approve"]
+    },
+    {
+      "address": "0x204C4913b83899b91DdF61A0b2BFaeef25c2bCBb",
+      "name": "MultiSigFactory",
+      "tier": "admin",
+      "monitorApprovals": false,
+      "monitorTransfers": false,
+      "monitorCalls": true,
+      "criticalFunctions": ["createMultiSig", "deploy"]
+    },
+    {
+      "address": "0xa3b71D74bA6E26f37deD0e34A36478E4a99EFDA1",
+      "name": "TokenFactory",
+      "tier": "public",
+      "monitorApprovals": false,
+      "monitorTransfers": false,
+      "monitorCalls": true,
+      "criticalFunctions": ["createToken", "deploy"]
+    },
+    {
+      "address": "0x58126ae8ff411a3B1768b121763a0E999221b6da",
+      "name": "NyxBatchAuction",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": true,
+      "criticalFunctions": ["placeBid", "settle", "startAuction"]
+    },
+    {
+      "address": "0xC0405E50D1BF816B9Fb1A741Cb46941828c378ea",
+      "name": "NyxBatchAuction",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": true,
+      "criticalFunctions": ["placeBid", "settle", "startAuction"]
+    },
+    {
+      "address": "0x9D0ED40615845ee6134F475AcCF35e0412CA1EdF",
+      "name": "Wattline",
+      "tier": "public",
+      "monitorApprovals": false,
+      "monitorTransfers": true,
+      "monitorCalls": true,
+      "criticalFunctions": ["stake", "withdraw", "claim"]
+    },
+    {
+      "address": "0x5D43267c50b457B58cb94577aa977C5CD21cc071",
+      "name": "GaslessGuest",
+      "tier": "public",
+      "monitorApprovals": false,
+      "monitorTransfers": false,
+      "monitorCalls": true,
+      "criticalFunctions": ["execute", "relay"]
+    },
+    {
+      "address": "0x6935B8ADD1ad176b73370F45b603Df30a303EF02",
+      "name": "MockSwap",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": true,
+      "criticalFunctions": ["swap", "addLiquidity", "removeLiquidity"]
+    },
+    {
+      "address": "0x936F59DA9c4E8961E128771FCCF4c015A9256911",
+      "name": "MockERC8004",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": false
+    },
+    {
+      "address": "0x3dBBd27D26d2AA3ed321A785C0513969f1fB23B8",
+      "name": "AgentAuth",
+      "tier": "admin",
+      "monitorApprovals": false,
+      "monitorTransfers": false,
+      "monitorCalls": true,
+      "criticalFunctions": ["authorize", "revoke", "execute"]
+    },
+    {
+      "address": "0x9f35375989361",
+      "name": "PermissionManager",
+      "tier": "admin",
+      "monitorApprovals": false,
+      "monitorTransfers": false,
+      "monitorCalls": true,
+      "criticalFunctions": ["grantPermission", "revokePermission"]
+    },
+    {
+      "address": "0x8D9Addf007461AB959369eD77df6363e41B8982d",
+      "name": "PokerTable",
+      "tier": "public",
+      "monitorApprovals": false,
+      "monitorTransfers": true,
+      "monitorCalls": true,
+      "criticalFunctions": ["joinTable", "leaveTable", "distributeWinnings"]
+    },
+    {
+      "address": "0xDAc3FcFF004d8a8675b94E44941A1a2e3b240090",
+      "name": "B DEX Positions NFT",
+      "tier": "public",
+      "monitorApprovals": true,
+      "monitorTransfers": true,
+      "monitorCalls": true,
+      "criticalFunctions": ["mint", "burn", "transferFrom"],
+      "isNFT": true
+    }
+  ]
+}

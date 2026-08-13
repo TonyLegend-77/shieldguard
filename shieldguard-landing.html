@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShieldGuard — Catch the drain before it happens.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #FAF9F6;
+    --surface: #FFFFFF;
+    --surfaceAlt: #F2F0FB;
+    --line: #E7E4F5;
+    --ink: #211D45;
+    --body: #4B4768;
+    --dim: #8783A0;
+    --faint: #B4B0C9;
+    --accent: #6C5CE7;
+    --accentSoft: #ECE9FE;
+    --nominal: #1C9A6C;
+    --info: #3B82C4;
+    --caution: #B7791F;
+    --critical: #C0344D;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--body);
+    font-family: "IBM Plex Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .font-display { font-family: "Fraunces", serif; }
+  .font-mono { font-family: "IBM Plex Mono", monospace; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 20px; }
+  .wrap-narrow { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+
+  /* Nav */
+  nav { display: flex; align-items: center; justify-content: space-between; padding: 24px 0; }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brand span { font-size: 18px; font-weight: 500; color: var(--ink); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent); color: #fff; font-size: 14px; font-weight: 500;
+    border-radius: 999px; padding: 10px 20px; text-decoration: none;
+    border: none; cursor: pointer; transition: background 0.15s;
+  }
+  .btn:hover { background: #5c4dd6; }
+  .btn-sm { padding: 10px 16px; font-size: 14px; }
+
+  /* Hero */
+  .hero { padding: 40px 0 64px; text-align: center; animation: fadeUp 0.6s ease-out both; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accentSoft); color: var(--accent);
+    font-size: 12px; font-weight: 500; border-radius: 999px; padding: 4px 12px; margin-bottom: 24px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--nominal); }
+  .hero h1 { font-size: clamp(36px, 6vw, 60px); line-height: 1.1; color: var(--ink); margin-bottom: 20px; }
+  .hero p { max-width: 560px; margin: 0 auto 32px; font-size: clamp(16px, 2vw, 18px); line-height: 1.6; }
+  .hero-actions { display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap; }
+  .link-quiet { color: var(--ink); font-size: 14px; font-weight: 500; text-decoration: none; }
+  .link-quiet:hover { color: var(--accent); }
+
+  /* Problem */
+  .section-alt { background: var(--surfaceAlt); padding: 64px 0; }
+  .problem-grid { display: grid; grid-template-columns: 1fr; gap: 32px; }
+  @media (min-width: 768px) { .problem-grid { grid-template-columns: 1fr 1.2fr; } }
+  .eyebrow { font-size: 12px; font-weight: 500; letter-spacing: 0.05em; color: var(--dim); text-transform: uppercase; margin-bottom: 8px; }
+  .problem-grid h2 { font-size: clamp(24px, 3vw, 30px); color: var(--ink); line-height: 1.3; }
+  .problem-grid p { line-height: 1.7; }
+  code { font-family: "IBM Plex Mono", monospace; font-size: 14px; background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; }
+
+  /* Features */
+  .section { padding: 64px 0; }
+  .section h2.centered { text-align: center; margin-bottom: 40px; font-size: clamp(24px, 3vw, 30px); color: var(--ink); }
+  .section p.centered { text-align: center; }
+  .feature-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  @media (min-width: 768px) { .feature-grid { grid-template-columns: repeat(3, 1fr); } }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+  .icon-circle {
+    width: 36px; height: 36px; border-radius: 50%; background: var(--accentSoft); color: var(--accent);
+    display: flex; align-items: center; justify-content: center; margin-bottom: 16px;
+  }
+  .card h3 { font-size: 18px; color: var(--ink); margin-bottom: 8px; }
+  .card p { font-size: 14px; line-height: 1.6; }
+
+  /* Live proof stats */
+  .stats-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 48px 32px; text-align: center; }
+  .stat-value { font-size: 30px; color: var(--ink); }
+  .stat-label { font-size: 12px; color: var(--dim); margin-top: 4px; }
+
+  /* Feed */
+  /* Interception pipeline (simulated mode) */
+  .pipeline-box { border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; display: none; }
+  .pipeline-box.active { display: block; }
+  .agent-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 8px; }
+  .agent-id { display: flex; align-items: center; gap: 8px; font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink); }
+  .agent-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--nominal); animation: pulse 1.4s ease-in-out infinite; }
+  .conn-badge { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--nominal); background: #EAF7F1; border: 1px solid #CDEEE0; border-radius: 999px; padding: 3px 10px; }
+  .tx-target { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--dim); }
+
+  .stage-track { display: flex; align-items: center; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stage-chip {
+    flex: 1; min-width: 90px; text-align: center; font-family: "IBM Plex Mono", monospace; font-size: 9px;
+    letter-spacing: 0.03em; padding: 8px 4px; border-radius: 6px; border: 1px solid var(--line);
+    color: var(--faint); background: var(--paper); transition: all 0.25s; text-transform: uppercase;
+  }
+  .stage-chip.pending { opacity: 0.5; }
+  .stage-chip.active { color: var(--accent); border-color: var(--accent); background: var(--accentSoft); }
+  .stage-chip.pass { color: var(--nominal); border-color: #CDEEE0; background: #EAF7F1; }
+  .stage-chip.fail { color: var(--critical); border-color: #F3CBD3; background: #FBEAEE; }
+  .stage-arrow { color: var(--faint); font-size: 12px; flex-shrink: 0; }
+
+  .stage-detail { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--dim); min-height: 18px; margin-bottom: 14px; }
+
+  .verdict-banner {
+    display: none; align-items: center; justify-content: space-between; padding: 12px 16px;
+    border-radius: 8px; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500;
+  }
+  .verdict-banner.show { display: flex; }
+  .verdict-banner.blocked { background: #FBEAEE; color: var(--critical); border: 1px solid #F3CBD3; }
+  .verdict-banner.flagged { background: #FDF3E3; color: var(--caution); border: 1px solid #F0DCA9; }
+  .verdict-banner.allowed { background: #EAF7F1; color: var(--nominal); border: 1px solid #CDEEE0; }
+
+  .feed-header { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+  .feed-header h2 { font-size: 18px; color: var(--ink); }
+  .radio-icon { color: var(--nominal); }
+  .radio-icon.sim { color: var(--accent); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .pulsing { animation: pulse 1.6s ease-in-out infinite; }
+  .toggle { display: inline-flex; align-items: center; background: var(--surfaceAlt); border: 1px solid var(--line); border-radius: 999px; padding: 2px; font-family: "IBM Plex Mono", monospace; font-size: 10px; }
+  .toggle button {
+    padding: 6px 12px; border-radius: 999px; border: none; background: transparent; color: var(--faint);
+    cursor: pointer; font-family: inherit; font-size: inherit; transition: all 0.15s;
+  }
+  .toggle button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+  .toggle button:hover:not(.active) { color: var(--dim); }
+  .feed-note { text-align: center; font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--faint); margin-bottom: 12px; }
+  .feed-note.sim { color: var(--caution); }
+  .feed-box { border: 1px solid var(--line); background: #fff; border-radius: 12px; overflow: hidden; }
+  .feed-empty { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--faint); padding: 32px 16px; text-align: center; }
+  .feed-row {
+    padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    border-top: 1px solid var(--line); animation: fadeUp 0.5s ease-out both;
+  }
+  .feed-row:first-child { border-top: none; }
+  @keyframes fadeUp { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+  .feed-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .sev-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .sev-dot.critical { background: var(--critical); }
+  .sev-dot.high { background: var(--caution); }
+  .sev-dot.low { background: var(--nominal); }
+  .feed-token { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .feed-reason { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 640px) { .feed-reason { display: none; } }
+  .feed-risk { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--faint); flex-shrink: 0; }
+
+  footer { padding: 40px 0; text-align: center; }
+  footer p { margin-top: 24px; font-size: 12px; color: var(--faint); }
+
+  svg { display: block; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6C5CE7" stroke-width="1.75"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+      <span class="font-display">ShieldGuard</span>
+    </div>
+    <a href="#" class="btn">Open the dashboard</a>
+  </nav>
+
+  <section class="hero">
+    <span class="badge"><span class="dot"></span>Live on BOT Chain testnet 968</span>
+    <h1 class="font-display">Catch the drain<br>before it happens.</h1>
+    <p>ShieldGuard watches every approval, transfer, and agent transaction live —
+      flags the threat, signs the verdict, and anchors the proof on-chain.
+      Detection and proof, never custody.</p>
+    <div class="hero-actions">
+      <a href="#" class="btn">Open the dashboard
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+      <a href="https://github.com/TonyLegend-77/shieldguard" target="_blank" rel="noopener" class="link-quiet">View the source →</a>
+    </div>
+  </section>
+</div>
+
+<section class="section-alt">
+  <div class="wrap problem-grid">
+    <div>
+      <p class="eyebrow">The problem</p>
+      <h2 class="font-display">One signature is all it takes.</h2>
+    </div>
+    <p>An unlimited <code>approve()</code> or a blanket <code>setApprovalForAll()</code>
+      hands a stranger standing permission to drain a wallet — any time, without
+      warning. AI agents make it worse: one prompt injection or hallucinated
+      action, and a key with no supervision can move everything. Most tools
+      only tell you after it's already gone.</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <p class="eyebrow centered" style="text-align:center;">How it watches</p>
+    <h2 class="font-display centered">Three ways to catch a threat, one way to prove it.</h2>
+    <div class="feature-grid">
+      <div class="card">
+        <div class="icon-circle">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <h3 class="font-display">On-chain, live</h3>
+        <p>Polls Approval, Transfer, ApprovalForAll, OwnershipTransferred, and Paused events every few seconds — plus raw transaction calldata for contracts with no standard event to watch.</p>
+      </div>
+      <div class="card">
+        <div class="icon-circle">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="8" cy="15" r="4"/><path d="M10.85 12.15L19 4M19 4h-4M19 4v4"/></svg>
+        </div>
+        <h3 class="font-display">Pre-signing, for agents</h3>
+        <p>A non-custodial SDK checks a transaction against the same rule engine before an AI agent ever signs it. ShieldGuard never holds the key — only returns a verdict.</p>
+      </div>
+      <div class="card">
+        <div class="icon-circle">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+        </div>
+        <h3 class="font-display">Signed and anchored</h3>
+        <p>Every flagged result gets an AI verdict, a cryptographic signature, and a permanent on-chain receipt — so a threat can't be quietly edited or disputed later.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-alt">
+  <div class="wrap stats-row">
+    <div><p class="stat-value font-display" id="stat-contracts">—</p><p class="stat-label">Contracts watched</p></div>
+    <div><p class="stat-value font-display" id="stat-scanned">—</p><p class="stat-label">Transactions scanned</p></div>
+    <div><p class="stat-value font-display" id="stat-flagged">—</p><p class="stat-label">Threats flagged</p></div>
+    <div><p class="stat-value font-display" id="stat-active">—</p><p class="stat-label">Active right now</p></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap-narrow">
+    <div class="feed-header">
+      <svg id="radio-icon" class="radio-icon pulsing" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5M12 12h.01"/></svg>
+      <h2 class="font-display" id="feed-title">Live threat feed</h2>
+      <div class="toggle">
+        <button id="btn-live" class="active" onclick="setMode('live')">LIVE</button>
+        <button id="btn-sim" onclick="setMode('simulated')">SIMULATED DEMO</button>
+      </div>
+    </div>
+    <p class="feed-note" id="feed-note">polling every 5s · real production data</p>
+
+    <div class="pipeline-box" id="pipeline-box">
+      <div class="agent-row">
+        <div class="agent-id">
+          <span class="agent-dot"></span>
+          <span id="agent-name">botchain-agent-0x7f3a…9c2</span>
+        </div>
+        <span class="conn-badge">CONNECTED</span>
+      </div>
+      <div class="tx-target" id="tx-target" style="margin-bottom:14px;">→ calling TokenFactory.createToken()</div>
+
+      <div class="stage-track" id="stage-track">
+        <div class="stage-chip pending" data-stage="intercept">Intercept</div>
+        <span class="stage-arrow">›</span>
+        <div class="stage-chip pending" data-stage="classify">Classify</div>
+        <span class="stage-arrow">›</span>
+        <div class="stage-chip pending" data-stage="hard_floor">Hard Floor</div>
+        <span class="stage-arrow">›</span>
+        <div class="stage-chip pending" data-stage="simulation">Simulate</div>
+        <span class="stage-arrow">›</span>
+        <div class="stage-chip pending" data-stage="ai_advisory">AI Advisory</div>
+        <span class="stage-arrow">›</span>
+        <div class="stage-chip pending" data-stage="decision">Decision</div>
+      </div>
+
+      <div class="stage-detail" id="stage-detail">Waiting for next transaction…</div>
+
+      <div class="verdict-banner" id="verdict-banner">
+        <span id="verdict-text"></span>
+        <span id="verdict-icon"></span>
+      </div>
+    </div>
+
+    <div class="feed-box" id="feed-box">
+      <p class="feed-empty" id="feed-empty">No flagged activity in the current window — that's good news. This feed updates the moment something gets caught. Switch to the simulated demo above to see it in action.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <a href="#" class="btn">Open the dashboard
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+  </a>
+  <p>46 threat patterns · rule engine v2 · policy engine v1</p>
+</footer>
+
+<script>
+  // Change this to your deployed backend URL before publishing.
+  const API = 'http://localhost:4000';
+
+  const SIMULATED_SCENARIOS = [
+    {
+      agent: 'botchain-agent-0x7f3a…9c2',
+      target: 'NyxBatchAuction.submitOrder()',
+      token: 'NyxBatchAuction',
+      classify: 'Selector 0xdf45908a matched — submitOrder, routes through an approve() first',
+      hardFloor: { result: 'fail', detail: 'Unlimited approve() detected — amount = type(uint256).max. Hard floor rule, no override.' },
+      verdict: 'blocked',
+    },
+    {
+      agent: 'botchain-agent-0x2c91…44e',
+      target: 'TokenFactory.transferOwnership()',
+      token: 'TokenFactory',
+      classify: 'Selector 0xf2fde38b matched — transferOwnership (ownership-transfer class)',
+      hardFloor: { result: 'fail', detail: 'Ownership-transfer function called from a non-multisig address. Hard floor rule, no override.' },
+      verdict: 'blocked',
+    },
+    {
+      agent: 'botchain-agent-0x91b2…7ad',
+      target: 'GaslessGuest.execute()',
+      token: 'GaslessGuest',
+      classify: 'Selector 0x1cff79cd matched — execute, arbitrary relayed call',
+      hardFloor: { result: 'pass', detail: 'No hard-floor rule matched — proceeding to simulation' },
+      simulation: { result: 'fail', detail: 'State diff shows a write to the EIP-1967 implementation slot — hidden proxy upgrade inside the call' },
+      verdict: 'blocked',
+    },
+    {
+      agent: 'botchain-agent-0x5e10…c3f',
+      target: 'Wattline.stake()',
+      token: 'Wattline',
+      classify: 'Selector 0xa694fc3a matched — stake, routine value transfer',
+      hardFloor: { result: 'pass', detail: 'No hard-floor rule matched — proceeding to simulation' },
+      simulation: { result: 'pass', detail: 'State diff clean — balance change matches declared stake amount, no hidden effects' },
+      aiAdvisory: { result: 'flag', detail: 'Anthropic: REVIEW_AND_REVOKE — stake amount 15x this wallet\u2019s historical average' },
+      verdict: 'flagged',
+    },
+    {
+      agent: 'botchain-agent-0x7f3a…9c2',
+      target: 'MultiSigWallet.confirmTransaction()',
+      token: 'MultiSigWallet',
+      classify: 'Selector 0xc01a8c84 matched — confirmTransaction (admin-tier, critical coverage)',
+      hardFloor: { result: 'pass', detail: 'No hard-floor rule matched — proceeding to simulation' },
+      simulation: { result: 'pass', detail: 'State diff clean — confirmation count increments, no fund movement yet' },
+      aiAdvisory: { result: 'pass', detail: 'Gemini: MONITOR — known signer, routine multisig confirmation' },
+      verdict: 'allowed',
+    },
+    {
+      agent: 'botchain-agent-0xa48f…102',
+      target: 'MockSwap.swap()',
+      token: 'MockSwap',
+      classify: 'Selector 0x7ff36ab5 matched — swap, routes through 3 internal calls',
+      hardFloor: { result: 'pass', detail: 'No hard-floor rule matched — proceeding to simulation' },
+      simulation: { result: 'pass', detail: 'State diff: net balance change matches quoted output within slippage tolerance' },
+      aiAdvisory: { result: 'pass', detail: 'OpenAI: MONITOR — multi-hop route through verified liquidity pools' },
+      verdict: 'allowed',
+    },
+  ];
+
+  const STAGE_ORDER = ['intercept', 'classify', 'hard_floor', 'simulation', 'ai_advisory', 'decision'];
+
+  function setChip(stage, state) {
+    const chip = document.querySelector(`.stage-chip[data-stage="${stage}"]`);
+    if (!chip) return;
+    chip.className = `stage-chip ${state}`;
+  }
+  function resetChips() {
+    STAGE_ORDER.forEach((s) => setChip(s, 'pending'));
+  }
+  function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+  let simRunning = false;
+  let simScenarioIndex = 0;
+
+  async function runSimulatedScenario() {
+    if (mode !== 'simulated') return;
+    simRunning = true;
+
+    const scenario = SIMULATED_SCENARIOS[simScenarioIndex % SIMULATED_SCENARIOS.length];
+    simScenarioIndex++;
+
+    resetChips();
+    document.getElementById('verdict-banner').className = 'verdict-banner';
+    document.getElementById('agent-name').textContent = scenario.agent;
+    document.getElementById('tx-target').textContent = `→ calling ${scenario.target}`;
+    document.getElementById('stage-detail').textContent = 'UserOperation constructed by agent…';
+    await wait(500);
+    if (mode !== 'simulated') { simRunning = false; return; }
+
+    // Intercept
+    setChip('intercept', 'active');
+    document.getElementById('stage-detail').textContent = 'Intercept layer caught the transaction before signing';
+    await wait(650);
+    setChip('intercept', 'pass');
+
+    // Classify
+    setChip('classify', 'active');
+    document.getElementById('stage-detail').textContent = scenario.classify;
+    await wait(750);
+    setChip('classify', 'pass');
+
+    // Hard floor
+    setChip('hard_floor', 'active');
+    document.getElementById('stage-detail').textContent = scenario.hardFloor.detail;
+    await wait(800);
+    setChip('hard_floor', scenario.hardFloor.result === 'pass' ? 'pass' : 'fail');
+
+    if (scenario.hardFloor.result !== 'pass') {
+      setChip('simulation', 'fail');
+      setChip('ai_advisory', 'fail');
+      await showVerdict(scenario);
+      return;
+    }
+
+    // Simulation
+    setChip('simulation', 'active');
+    document.getElementById('stage-detail').textContent = scenario.simulation.detail;
+    await wait(850);
+    setChip('simulation', scenario.simulation.result === 'pass' ? 'pass' : 'fail');
+
+    if (scenario.simulation.result !== 'pass') {
+      setChip('ai_advisory', 'fail');
+      await showVerdict(scenario);
+      return;
+    }
+
+    // AI advisory
+    setChip('ai_advisory', 'active');
+    document.getElementById('stage-detail').textContent = scenario.aiAdvisory.detail;
+    await wait(900);
+    setChip('ai_advisory', scenario.aiAdvisory.result === 'pass' ? 'pass' : 'fail');
+
+    await showVerdict(scenario);
+  }
+
+  async function showVerdict(scenario) {
+    setChip('decision', 'active');
+    await wait(500);
+
+    const banner = document.getElementById('verdict-banner');
+    const text = document.getElementById('verdict-text');
+    const icon = document.getElementById('verdict-icon');
+
+    if (scenario.verdict === 'blocked') {
+      setChip('decision', 'fail');
+      banner.className = 'verdict-banner show blocked';
+      text.textContent = 'BLOCKED — co-signature withheld, UserOperation rejected';
+      icon.textContent = '✕';
+    } else if (scenario.verdict === 'flagged') {
+      setChip('decision', 'active');
+      banner.className = 'verdict-banner show flagged';
+      text.textContent = 'FLAGGED FOR REVIEW — held pending secondary approval';
+      icon.textContent = '!';
+    } else {
+      setChip('decision', 'pass');
+      banner.className = 'verdict-banner show allowed';
+      text.textContent = 'ALLOWED — oracle co-signature issued, transaction proceeds';
+      icon.textContent = '✓';
+    }
+
+    document.getElementById('stage-detail').textContent = 'Logged to feed below.';
+
+    simFeed = [{ token: scenario.token, reason: scenario.aiAdvisory?.detail || scenario.simulation?.detail || scenario.hardFloor.detail, risk: scenario.verdict === 'blocked' ? 'CRITICAL' : scenario.verdict === 'flagged' ? 'HIGH' : 'LOW' }, ...simFeed].slice(0, 8);
+    renderFeed();
+
+    await wait(2200);
+    simRunning = false;
+    if (mode === 'simulated') runSimulatedScenario();
+  }
+
+  let mode = 'live';
+  let liveFeed = [];
+  let simFeed = [];
+
+  function sevClass(risk) {
+    if (risk === 'CRITICAL') return 'critical';
+    if (risk === 'HIGH') return 'high';
+    return 'low';
+  }
+
+  function renderFeed() {
+    const box = document.getElementById('feed-box');
+    const data = mode === 'live' ? liveFeed : simFeed;
+
+    if (data.length === 0) {
+      const msg = mode === 'live'
+        ? "No flagged activity in the current window — that's good news. This feed updates the moment something gets caught. Switch to the simulated demo above to see it in action."
+        : 'Starting simulation…';
+      box.innerHTML = `<p class="feed-empty">${msg}</p>`;
+      return;
+    }
+
+    box.innerHTML = data.map(a => `
+      <div class="feed-row">
+        <div class="feed-left">
+          <span class="sev-dot ${sevClass(a.risk)}"></span>
+          <span class="feed-token">${a.token || a.tokenAddress || 'Unknown contract'}</span>
+          <span class="feed-reason">${a.reason || ''}</span>
+        </div>
+        <span class="feed-risk">${a.risk || '—'}</span>
+      </div>
+    `).join('');
+  }
+
+  function setMode(newMode) {
+    mode = newMode;
+    document.getElementById('btn-live').classList.toggle('active', mode === 'live');
+    document.getElementById('btn-sim').classList.toggle('active', mode === 'simulated');
+    document.getElementById('feed-title').textContent = mode === 'live' ? 'Live threat feed' : 'Simulated threat feed';
+    document.getElementById('radio-icon').classList.toggle('sim', mode === 'simulated');
+
+    const note = document.getElementById('feed-note');
+    if (mode === 'simulated') {
+      note.textContent = '⚠ Simulated for demonstration — not real transactions';
+      note.classList.add('sim');
+    } else {
+      note.textContent = 'polling every 5s · real production data';
+      note.classList.remove('sim');
+    }
+
+    document.getElementById('pipeline-box').classList.toggle('active', mode === 'simulated');
+    if (mode === 'simulated') {
+      simFeed = [];
+      simScenarioIndex = 0;
+      renderFeed();
+      if (!simRunning) runSimulatedScenario();
+    } else {
+      renderFeed();
+    }
+  }
+
+  async function loadStats() {
+    try {
+      const res = await fetch(`${API}/api/stats/global`);
+      const data = await res.json();
+      document.getElementById('stat-contracts').textContent = data.totalContracts ?? '—';
+      document.getElementById('stat-scanned').textContent = data.totalScanned ?? '—';
+      document.getElementById('stat-flagged').textContent = data.totalFlagged ?? '—';
+      document.getElementById('stat-active').textContent = data.activeContracts ?? '—';
+    } catch (e) { /* backend unreachable — stats stay at — */ }
+  }
+
+  async function loadFeed() {
+    if (mode !== 'live') return;
+    try {
+      const res = await fetch(`${API}/api/alerts/global`);
+      const data = await res.json();
+      liveFeed = Array.isArray(data) ? data.slice(0, 8) : [];
+      if (mode === 'live') renderFeed();
+    } catch (e) { /* backend unreachable — feed stays empty */ }
+  }
+
+  loadStats();
+  loadFeed();
+  setInterval(loadStats, 15000);
+  setInterval(loadFeed, 5000);
+</script>
+
+</body>
+</html>
