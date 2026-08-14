@@ -8,7 +8,7 @@
 
 import { dispatchAlert } from "./alertDispatch.js";
 
-const MAX_ALERTS = 200;
+const MAX_ALERTS = parseInt(process.env.MAX_ALERTS || "5000", 10);
 
 const FREE_TIER_MAX_CONTRACTS = parseInt(process.env.FREE_TIER_MAX_CONTRACTS || "3", 10);
 const PUBLIC_TX_LIMIT = parseInt(process.env.PUBLIC_TX_LIMIT || "20", 10);
@@ -162,6 +162,7 @@ export function recordEvent({
     time: new Date().toISOString(),
     signed: !!signed,
     hash: hash || null,
+    txHash: txHash || null,
     verdict: verdict || null,
     anchored: !!anchored,
   };

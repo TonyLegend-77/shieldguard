@@ -1,2 +1,11 @@
 [phases.setup]
 nixPkgs = ["nodejs_24", "npm-9_x", "python3"]
+
+# Without this, `hardhat compile` never runs on deploy, so
+# artifacts/contracts/ReceiptRegistry.sol/ReceiptRegistry.json never gets
+# generated. chainVerify.js silently fails to load that artifact and
+# verifyOnChain() always returns { available: false } — every dashboard
+# verdict looks "not confirmed on-chain" even with RECEIPT_REGISTRY_ADDRESS
+# and RPC_URL correctly set.
+[phases.build]
+cmds = ["npm run build"]

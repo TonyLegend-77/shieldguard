@@ -234,7 +234,10 @@ export function startServer(deps = {}) {
   );
 
   app.get("/verify/:hash", async (req, res) => {
-    const alert = getAlerts().find((a) => a.hash === req.params.hash);
+    const needle = req.params.hash.toLowerCase();
+    const alert = getAlerts().find(
+      (a) => (a.hash && a.hash.toLowerCase() === needle) || (a.txHash && a.txHash.toLowerCase() === needle)
+    );
     const chain = await verifyOnChain(req.params.hash);
 
     if (!alert && !chain.anchored) {
@@ -250,7 +253,52 @@ export function startServer(deps = {}) {
 
   // Public dashboard — no wallet required.
   app.get("/api/stats/global", (req, res) => res.json(getGlobalStats()));
-  app.get("/api/alerts/global", (req, res) => res.json(getAlerts()));
+
+  // ?q= matches contract name, contract address, tx hash, or content hash
+  // (case-insensitive substring). ?limit= caps how many rows come back
+  // (default 50 for normal feed display; pass a higher number, up to
+  // MAX_ALERTS, when actually searching history).
+  app.get("/api/alerts/global", (req, res) => {
+    const { q, limit } = req.query;
+    let results = getAlerts();
+
+    if (q && q.trim()) {
+      const needle = q.trim().toLowerCase();
+      results = results.filter(
+        (a) =>
+          (a.token && a.token.toLowerCase().includes(needle)) ||
+          (a.tokenAddress && a.tokenAddress.toLowerCase().includes(needle)) ||
+          (a.txHash && a.txHash.toLowerCase().includes(needle)) ||
+          (a.hash && a.hash.toLowerCase().includes(needle)) ||
+          (a.from && a.from.toLowerCase().includes(needle)) ||
+          (a.to && a.to.toLowerCase().includes(needle))
+      );
+    }
+
+    const cap = Math.min(parseInt(limit, 10) || (q ? 200 : 50), 5000);
+    res.json(results.slice(0, cap));
+  });
+
+  // ?q= matches contract name or address (case-insensitive substring).
+  // Backs the "search watched contracts" box — this is the full
+  // CONTRACT_TARGETS + user-submitted guardian list (987+ on mainnet),
+  // not just the ones a given wallet personally added.
+  app.get("/api/contracts", (req, res) => {
+    const { q, limit } = req.query;
+    let results = getGuardians();
+
+    if (q && q.trim()) {
+      const needle = q.trim().toLowerCase();
+      results = results.filter(
+        (g) =>
+          (g.name && g.name.toLowerCase().includes(needle)) ||
+          (g.address && g.address.toLowerCase().includes(needle))
+      );
+    }
+
+    const cap = Math.min(parseInt(limit, 10) || (q ? 200 : 100), 2000);
+    res.json(results.slice(0, cap));
+  });
 
   // Personal dashboard — scoped to whichever wallet added the contracts.
   // Note: this is read-only visibility, not auth — anyone can query any
@@ -441,8 +489,10 @@ export function startServer(deps = {}) {
     console.log(`  GET /alerts    — all events`);
     console.log(`  GET /guardians — watched tokens`);
     console.log(`  GET /health    — status + config`);
-    console.log(`  GET /verify/:hash — lookup by receipt hash`);
+    console.log(`  GET /verify/:hash — lookup by receipt content hash or tx hash`);
     console.log(`  GET /api/stats/global — public dashboard stats`);
+    console.log(`  GET /api/alerts/global?q=&limit= — searchable live threat feed (name/address/txHash/hash)`);
+    console.log(`  GET /api/contracts?q=&limit= — searchable watched-contracts list`);
     console.log(`  GET /api/user/* — personal dashboard (?address=0x...)`);
     console.log(`  POST /api/validate — SDK Wrapper pre-signing check`);
     console.log(`  POST /api/intent/build — Intent Router: build + validate a tx from a high-level intent`);

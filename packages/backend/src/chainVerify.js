@@ -62,6 +62,7 @@ export async function verifyOnChain(contentHash) {
       console.error("[chainVerify] Could not fetch anchor tx hash:", err.message);
     }
 
+    const explorerBase = (process.env.EXPLORER_URL || "https://scan.bohr.life").replace(/\/$/, "");
     return {
       available: true,
       anchored: true,
@@ -72,8 +73,8 @@ export async function verifyOnChain(contentHash) {
       registryAddress: process.env.RECEIPT_REGISTRY_ADDRESS,
       txHash,
       explorerUrl: txHash
-        ? `https://scan.bohr.life/tx/${txHash}`
-        : `https://scan.bohr.life/address/${process.env.RECEIPT_REGISTRY_ADDRESS}`,
+        ? `${explorerBase}/tx/${txHash}`
+        : `${explorerBase}/address/${process.env.RECEIPT_REGISTRY_ADDRESS}`,
     };
   } catch (err) {
     return { available: false, reason: err.message };
