@@ -192,13 +192,13 @@ function AddContractForm({ wallet, onAdded }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Name"
-          className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+          className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
         />
         <input
           value={contractAddress}
           onChange={(e) => setContractAddress(e.target.value)}
           placeholder="0x contract address"
-          className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+          className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
         />
       </div>
 

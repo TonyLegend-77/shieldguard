@@ -83,7 +83,12 @@ function buildSteps(res) {
   return { steps: [decodeStep, floorStep, simStep, aiStep], error: null };
 }
 
-export default function PolicyDebugger() {
+const FALLBACK_T = {
+  'debugger.label': 'Policy engine debugger',
+  'debugger.title': 'Watch the pipeline decide.',
+};
+
+export default function PolicyDebugger({ t = (k) => FALLBACK_T[k] || k }) {
   const [key, setKey] = useState('prompt_hijack');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
@@ -134,8 +139,8 @@ export default function PolicyDebugger() {
       <div className="max-w-5xl mx-auto px-5">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 mb-8">
           <div>
-            <p className="text-xs font-medium tracking-wide text-dim uppercase mb-2">Policy engine debugger</p>
-            <h2 className="font-display text-2xl md:text-3xl text-ink leading-snug">Watch the pipeline decide.</h2>
+            <p className="text-xs font-medium tracking-wide text-dim uppercase mb-2">{t('debugger.label')}</p>
+            <h2 className="font-display text-2xl md:text-3xl text-ink leading-snug">{t('debugger.title')}</h2>
           </div>
           <p className="text-sm text-body max-w-sm">
             This calls your real <code className="font-mono">/api/oracle/evaluate</code> endpoint. Same hard-floor
@@ -145,7 +150,7 @@ export default function PolicyDebugger() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-5 space-y-4">
-            <div className="bg-white border border-line rounded-xl p-4 space-y-2">
+            <div className="bg-surface border border-line rounded-xl p-4 space-y-2">
               <p className="text-xs font-mono text-dim mb-1">SELECT A PAYLOAD</p>
               {Object.entries(SCENARIOS).map(([k, s]) => (
                 <button
@@ -171,7 +176,7 @@ export default function PolicyDebugger() {
               <p className="text-[10px] text-faint pt-1 leading-relaxed">{scenario.note}</p>
             </div>
 
-            <div className="bg-white border border-line rounded-xl p-4">
+            <div className="bg-surface border border-line rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-mono text-dim">TO / METHOD / DATA</span>
                 <span
@@ -197,7 +202,7 @@ export default function PolicyDebugger() {
           </div>
 
           <div className="lg:col-span-7">
-            <div className="bg-white border border-line rounded-xl p-5 h-full flex flex-col justify-between">
+            <div className="bg-surface border border-line rounded-xl p-5 h-full flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
                   <span className="text-sm font-medium text-ink">

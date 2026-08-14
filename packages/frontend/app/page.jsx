@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Shield, Eye, FileSignature, KeyRound, ArrowRight, Radio } from 'lucide-react';
 import PolicyDebugger from './components/PolicyDebugger';
+import ThemeToggle from './components/ThemeToggle';
+import LanguageToggle from './components/LanguageToggle';
+import { useTheme } from './lib/theme';
+import { useLanguage } from './lib/i18n';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -21,6 +25,8 @@ export default function LandingPage() {
   const [feed, setFeed] = useState([]);
   const [mode, setMode] = useState('live'); // 'live' | 'simulated'
   const [simFeed, setSimFeed] = useState([]);
+  const { theme, toggle } = useTheme();
+  const { lang, setLang, t } = useLanguage();
 
   useEffect(() => {
     fetch(`${API}/api/stats/global`)
@@ -65,29 +71,31 @@ export default function LandingPage() {
             <Shield className="w-5 h-5 text-accent" strokeWidth={1.75} />
             <span className="font-display text-lg font-medium text-ink">ShieldGuard</span>
           </div>
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-1.5 bg-accent text-white text-sm font-medium rounded-full px-4 py-2 hover:bg-accent/90 transition-colors"
-          >
-            Open the dashboard
-          </Link>
+          <div className="flex items-center gap-3">
+            <LanguageToggle lang={lang} onChange={setLang} />
+            <ThemeToggle theme={theme} onToggle={toggle} />
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1.5 bg-accent text-white text-sm font-medium rounded-full px-4 py-2 hover:bg-accent/90 transition-colors"
+            >
+              {t('nav.dashboard')}
+            </Link>
+          </div>
         </nav>
 
         {/* Hero */}
         <section className="pt-10 pb-16 text-center animate-fadeUp">
           <span className="inline-flex items-center gap-1.5 bg-accentSoft text-accent text-xs font-medium rounded-full px-3 py-1 mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-nominal" />
-            Live on BOT Chain testnet 968
+            {t('hero.badge')}
           </span>
 
           <h1 className="font-display text-4xl md:text-6xl leading-[1.1] text-ink mb-5">
-            Catch the drain<br />before it happens.
+            {t('hero.title1')}<br />{t('hero.title2')}
           </h1>
 
           <p className="max-w-xl mx-auto text-body text-base md:text-lg leading-relaxed mb-8">
-            ShieldGuard watches every approval, transfer, and agent transaction live —
-            flags the threat, signs the verdict, and anchors the proof on-chain.
-            Detection and proof, never custody.
+            {t('hero.body')}
           </p>
 
           <div className="flex items-center justify-center gap-5">
@@ -95,7 +103,7 @@ export default function LandingPage() {
               href="/dashboard"
               className="inline-flex items-center gap-1.5 bg-accent text-white text-sm font-medium rounded-full px-5 py-2.5 hover:bg-accent/90 transition-colors"
             >
-              Open the dashboard
+              {t('nav.dashboard')}
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
             <a
@@ -104,7 +112,7 @@ export default function LandingPage() {
               rel="noopener noreferrer"
               className="text-sm font-medium text-ink hover:text-accent transition-colors"
             >
-              View the source →
+              {t('nav.source')} →
             </a>
           </div>
         </section>
@@ -114,18 +122,24 @@ export default function LandingPage() {
       <section className="bg-surfaceAlt py-16">
         <div className="max-w-5xl mx-auto px-5 grid grid-cols-1 md:grid-cols-[1fr_1.2fr] gap-8">
           <div>
-            <p className="text-xs font-medium tracking-wide text-dim uppercase mb-2">The problem</p>
+            <p className="text-xs font-medium tracking-wide text-dim uppercase mb-2">{t('problem.label')}</p>
             <h2 className="font-display text-2xl md:text-3xl text-ink leading-snug">
-              One signature is all it takes.
+              {t('problem.title')}
             </h2>
           </div>
           <p className="text-body leading-relaxed">
-            An unlimited <code className="font-mono text-sm bg-white border border-line rounded px-1.5 py-0.5">approve()</code>{' '}
-            or a blanket <code className="font-mono text-sm bg-white border border-line rounded px-1.5 py-0.5">setApprovalForAll()</code>{' '}
-            hands a stranger standing permission to drain a wallet — any time, without
-            warning. AI agents make it worse: one prompt injection or hallucinated
-            action, and a key with no supervision can move everything. Most tools
-            only tell you after it's already gone.
+            {lang === 'en' ? (
+              <>
+                An unlimited <code className="font-mono text-sm bg-surface border border-line rounded px-1.5 py-0.5">approve()</code>{' '}
+                or a blanket <code className="font-mono text-sm bg-surface border border-line rounded px-1.5 py-0.5">setApprovalForAll()</code>{' '}
+                hands a stranger standing permission to drain a wallet — any time, without
+                warning. AI agents make it worse: one prompt injection or hallucinated
+                action, and a key with no supervision can move everything. Most tools
+                only tell you after it's already gone.
+              </>
+            ) : (
+              t('problem.body')
+            )}
           </p>
         </div>
       </section>
@@ -133,32 +147,32 @@ export default function LandingPage() {
       {/* How it watches */}
       <section className="py-16">
         <div className="max-w-5xl mx-auto px-5">
-          <p className="text-xs font-medium tracking-wide text-dim uppercase mb-2 text-center">How it watches</p>
+          <p className="text-xs font-medium tracking-wide text-dim uppercase mb-2 text-center">{t('how.label')}</p>
           <h2 className="font-display text-2xl md:text-3xl text-ink text-center mb-10">
-            Three ways to catch a threat, one way to prove it.
+            {t('how.title')}
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <FeatureCard
               icon={<Eye className="w-5 h-5" />}
-              title="On-chain, live"
-              body="Polls Approval, Transfer, ApprovalForAll, OwnershipTransferred, and Paused events every few seconds — plus raw transaction calldata for contracts with no standard event to watch."
+              title={t('how.onchain.title')}
+              body={t('how.onchain.body')}
             />
             <FeatureCard
               icon={<KeyRound className="w-5 h-5" />}
-              title="Pre-signing, for agents"
-              body="A non-custodial SDK checks a transaction against the same rule engine before an AI agent ever signs it. ShieldGuard never holds the key — only returns a verdict."
+              title={t('how.presign.title')}
+              body={t('how.presign.body')}
             />
             <FeatureCard
               icon={<FileSignature className="w-5 h-5" />}
-              title="Signed and anchored"
-              body="Every flagged result gets an AI verdict, a cryptographic signature, and a permanent on-chain receipt — so a threat can't be quietly edited or disputed later."
+              title={t('how.signed.title')}
+              body={t('how.signed.body')}
             />
           </div>
         </div>
       </section>
 
-      <PolicyDebugger />
+      <PolicyDebugger t={t} />
 
       {/* Live proof */}
       <section className="bg-surfaceAlt py-12">
@@ -184,7 +198,7 @@ export default function LandingPage() {
               <button
                 onClick={() => setMode('live')}
                 className={`px-2.5 py-1 rounded-full transition-colors ${
-                  mode === 'live' ? 'bg-white text-ink shadow-sm' : 'text-faint hover:text-dim'
+                  mode === 'live' ? 'bg-surface text-ink shadow-sm' : 'text-faint hover:text-dim'
                 }`}
               >
                 LIVE
@@ -192,7 +206,7 @@ export default function LandingPage() {
               <button
                 onClick={() => setMode('simulated')}
                 className={`px-2.5 py-1 rounded-full transition-colors ${
-                  mode === 'simulated' ? 'bg-white text-ink shadow-sm' : 'text-faint hover:text-dim'
+                  mode === 'simulated' ? 'bg-surface text-ink shadow-sm' : 'text-faint hover:text-dim'
                 }`}
               >
                 SIMULATED DEMO
@@ -211,7 +225,7 @@ export default function LandingPage() {
             </p>
           )}
 
-          <div className="border border-line bg-white rounded-xl overflow-hidden">
+          <div className="border border-line bg-surface rounded-xl overflow-hidden">
             {mode === 'live' && feed.length === 0 && (
               <p className="font-mono text-xs text-faint px-4 py-8 text-center">
                 No flagged activity in the current window — that&apos;s good news. This
@@ -274,7 +288,7 @@ export default function LandingPage() {
 
 function FeatureCard({ icon, title, body }) {
   return (
-    <div className="bg-white border border-line rounded-xl p-6">
+    <div className="bg-surface border border-line rounded-xl p-6">
       <div className="w-9 h-9 rounded-full bg-accentSoft text-accent flex items-center justify-center mb-4">
         {icon}
       </div>

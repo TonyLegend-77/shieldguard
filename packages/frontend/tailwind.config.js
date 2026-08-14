@@ -1,5 +1,20 @@
 /** @type {import('tailwindcss').Config} */
+
+// Reads a CSS custom property defined as "R G B" (space-separated, no
+// commas) and turns it into a Tailwind color function that still supports
+// opacity modifiers like bg-critical/10. This is what lets every existing
+// component (which already uses bg-surface, text-ink, border-line, etc.)
+// pick up dark mode automatically once .dark is toggled on <html> —
+// nothing in the components changes, only the variable values do.
+function withOpacity(varName) {
+  return ({ opacityValue }) => {
+    if (opacityValue === undefined) return `rgb(var(${varName}))`;
+    return `rgb(var(${varName}) / ${opacityValue})`;
+  };
+}
+
 module.exports = {
+  darkMode: 'class',
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -7,20 +22,20 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        paper: '#FAF9F6',
-        surface: '#FFFFFF',
-        surfaceAlt: '#F2F0FB',
-        line: '#E7E4F5',
-        ink: '#211D45',
-        body: '#4B4768',
-        dim: '#8783A0',
-        faint: '#B4B0C9',
-        accent: '#6C5CE7',
-        accentSoft: '#ECE9FE',
-        nominal: '#1C9A6C',
-        info: '#3B82C4',
-        caution: '#B7791F',
-        critical: '#C0344D',
+        paper: withOpacity('--color-paper'),
+        surface: withOpacity('--color-surface'),
+        surfaceAlt: withOpacity('--color-surfaceAlt'),
+        line: withOpacity('--color-line'),
+        ink: withOpacity('--color-ink'),
+        body: withOpacity('--color-body'),
+        dim: withOpacity('--color-dim'),
+        faint: withOpacity('--color-faint'),
+        accent: withOpacity('--color-accent'),
+        accentSoft: withOpacity('--color-accentSoft'),
+        nominal: withOpacity('--color-nominal'),
+        info: withOpacity('--color-info'),
+        caution: withOpacity('--color-caution'),
+        critical: withOpacity('--color-critical'),
       },
       fontFamily: {
         display: ['Fraunces', 'serif'],

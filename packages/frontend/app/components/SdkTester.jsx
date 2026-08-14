@@ -262,7 +262,7 @@ export default function SdkTester({ wallet }) {
           </h2>
         </div>
 
-        <div className="flex items-center gap-1 bg-white border border-line rounded-full p-0.5">
+        <div className="flex items-center gap-1 bg-surface border border-line rounded-full p-0.5">
           <button
             type="button"
             onClick={() => switchMode('calldata')}
@@ -290,7 +290,7 @@ export default function SdkTester({ wallet }) {
             <select
               value={scenario}
               onChange={(e) => setScenario(e.target.value)}
-              className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink focus:outline-none focus:border-accent/50"
+              className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink focus:outline-none focus:border-accent/50"
             >
               {Object.entries(SCENARIOS).map(([key, s]) => (
                 <option key={key} value={key}>{s.label}</option>
@@ -301,14 +301,14 @@ export default function SdkTester({ wallet }) {
               value={from}
               onChange={(e) => setFrom(e.target.value)}
               placeholder="From address (defaults to connected wallet)"
-              className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+              className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
             />
 
             <input
               value={to}
               onChange={(e) => setTo(e.target.value)}
               placeholder="To — target contract address"
-              className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+              className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
             />
 
             {cfg.needsSpender ? (
@@ -316,14 +316,14 @@ export default function SdkTester({ wallet }) {
                 value={spender}
                 onChange={(e) => setSpender(e.target.value)}
                 placeholder={cfg.spenderLabel || 'Spender address'}
-                className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+                className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
               />
             ) : (
               <input
                 value={customData}
                 onChange={(e) => setCustomData(e.target.value)}
                 placeholder="Raw calldata (0x...)"
-                className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+                className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
               />
             )}
           </div>
@@ -351,7 +351,7 @@ export default function SdkTester({ wallet }) {
             <select
               value={intentAction}
               onChange={(e) => setIntentAction(e.target.value)}
-              className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink focus:outline-none focus:border-accent/50"
+              className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink focus:outline-none focus:border-accent/50"
             >
               {Object.entries(INTENT_ACTIONS).map(([key, a]) => (
                 <option key={key} value={key}>{a.label}</option>
@@ -362,14 +362,14 @@ export default function SdkTester({ wallet }) {
               value={intentFrom}
               onChange={(e) => setIntentFrom(e.target.value)}
               placeholder="From address (defaults to connected wallet)"
-              className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+              className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
             />
 
             <input
               value={intentToken}
               onChange={(e) => setIntentToken(e.target.value)}
               placeholder="Token / contract address"
-              className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+              className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
             />
 
             {intentCfg.fields.includes('spender') && (
@@ -377,7 +377,7 @@ export default function SdkTester({ wallet }) {
                 value={intentSpender}
                 onChange={(e) => setIntentSpender(e.target.value)}
                 placeholder="Spender address"
-                className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+                className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
               />
             )}
 
@@ -386,7 +386,7 @@ export default function SdkTester({ wallet }) {
                 value={intentOperator}
                 onChange={(e) => setIntentOperator(e.target.value)}
                 placeholder="Operator address"
-                className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+                className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
               />
             )}
 
@@ -395,7 +395,7 @@ export default function SdkTester({ wallet }) {
                 value={intentTo}
                 onChange={(e) => setIntentTo(e.target.value)}
                 placeholder="Recipient address"
-                className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+                className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
               />
             )}
 
@@ -404,7 +404,7 @@ export default function SdkTester({ wallet }) {
                 value={intentAmount}
                 onChange={(e) => setIntentAmount(e.target.value)}
                 placeholder="Amount (wei, e.g. max uint256 for unlimited)"
-                className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+                className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
               />
             )}
 

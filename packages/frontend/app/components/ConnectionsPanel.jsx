@@ -141,7 +141,7 @@ export default function ConnectionsPanel({ wallet }) {
                 )}{' '}
                 with:
               </p>
-              <code className="block bg-white border border-line rounded-lg px-2.5 py-1.5 text-ink">
+              <code className="block bg-surface border border-line rounded-lg px-2.5 py-1.5 text-ink">
                 /start {linkCode}
               </code>
             </div>
@@ -270,7 +270,7 @@ function ConnectForm({ wallet, summary, onAdded }) {
           value={watchAddress}
           onChange={(e) => setWatchAddress(e.target.value)}
           placeholder="0x wallet or agent address"
-          className="bg-white border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+          className="bg-surface border border-line rounded-lg px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
         />
         <div className="flex items-center gap-3 font-mono text-[11px]">
           <label className="flex items-center gap-1.5 cursor-pointer">

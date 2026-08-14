@@ -2,25 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light (default) — the existing lavender/paper brand. */
+:root {
+  --color-paper: 250 249 246;      /* #FAF9F6 */
+  --color-surface: 255 255 255;    /* #FFFFFF */
+  --color-surfaceAlt: 242 240 251; /* #F2F0FB */
+  --color-line: 231 228 245;       /* #E7E4F5 */
+  --color-ink: 33 29 69;           /* #211D45 */
+  --color-body: 75 71 104;         /* #4B4768 */
+  --color-dim: 135 131 160;        /* #8783A0 */
+  --color-faint: 180 176 201;      /* #B4B0C9 */
+  --color-accent: 108 92 231;      /* #6C5CE7 */
+  --color-accentSoft: 236 233 254; /* #ECE9FE */
+  --color-nominal: 28 154 108;     /* #1C9A6C */
+  --color-info: 59 130 196;        /* #3B82C4 */
+  --color-caution: 183 121 31;     /* #B7791F */
+  --color-critical: 192 52 77;     /* #C0344D */
+}
+
+/* Dark — zinc + emerald, matches the dashboard's original v2 design. */
+.dark {
+  --color-paper: 9 9 11;           /* zinc-950 */
+  --color-surface: 24 24 27;       /* zinc-900 */
+  --color-surfaceAlt: 39 39 42;    /* zinc-800 */
+  --color-line: 63 63 70;          /* zinc-700 */
+  --color-ink: 244 244 245;        /* zinc-100 */
+  --color-body: 212 212 216;       /* zinc-300 */
+  --color-dim: 161 161 170;        /* zinc-400 */
+  --color-faint: 113 113 122;      /* zinc-500 */
+  --color-accent: 16 185 129;      /* emerald-500 */
+  --color-accentSoft: 6 46 36;     /* deep emerald tint */
+  --color-nominal: 52 211 153;     /* emerald-400 */
+  --color-info: 96 165 250;        /* blue-400 */
+  --color-caution: 251 191 36;     /* amber-400 */
+  --color-critical: 251 113 133;   /* rose-400 */
+}
+
 body {
   font-family: 'IBM Plex Sans', sans-serif;
-  background-color: #FAF9F6;
-  color: #211D45;
+  background-color: rgb(var(--color-paper));
+  color: rgb(var(--color-ink));
   min-height: 100vh;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 ::-webkit-scrollbar {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #FAF9F6;
+  background: rgb(var(--color-paper));
 }
 ::-webkit-scrollbar-thumb {
-  background: #E7E4F5;
+  background: rgb(var(--color-line));
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #D3CEEE;
+  background: rgb(var(--color-dim));
 }
 
 /* Signature element: each alert renders like a torn receipt stub — a
@@ -28,8 +65,8 @@ body {
    that a threat isn't real until it has a signed, anchored receipt. */
 .receipt {
   position: relative;
-  background: #FFFFFF;
-  border: 1px solid #E7E4F5;
+  background: rgb(var(--color-surface));
+  border: 1px solid rgb(var(--color-line));
   border-radius: 4px;
 }
 .receipt::before {
@@ -39,8 +76,8 @@ body {
   left: -7px;
   width: 14px;
   height: 14px;
-  background: #FAF9F6;
-  border: 1px solid #E7E4F5;
+  background: rgb(var(--color-paper));
+  border: 1px solid rgb(var(--color-line));
   border-radius: 50%;
 }
 .receipt::after {
@@ -50,12 +87,12 @@ body {
   right: -7px;
   width: 14px;
   height: 14px;
-  background: #FAF9F6;
-  border: 1px solid #E7E4F5;
+  background: rgb(var(--color-paper));
+  border: 1px solid rgb(var(--color-line));
   border-radius: 50%;
 }
 .receipt-perforation {
-  border-top: 1px dashed #E7E4F5;
+  border-top: 1px dashed rgb(var(--color-line));
 }
 
 @media (prefers-reduced-motion: reduce) {
