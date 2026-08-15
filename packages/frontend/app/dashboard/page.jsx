@@ -1,6 +1,7 @@
 'use client';
 
 import { Shield, Github } from 'lucide-react';
+import Link from 'next/link';
 import { useWallet } from '../lib/wallet';
 import { useTheme } from '../lib/theme';
 import { useLanguage } from '../lib/i18n';
@@ -46,6 +47,7 @@ export default function Dashboard() {
           <div className="hidden md:flex items-center gap-5 font-mono text-[11px] text-dim">
             <a href="#architecture" className="hover:text-ink transition-colors">Architecture</a>
             <a href="#integration" className="hover:text-ink transition-colors">Integration</a>
+            <Link href="/pricing" className="hover:text-ink transition-colors">Pricing</Link>
             <a href="https://github.com/TonyLegend-77/shieldguard" target="_blank" rel="noreferrer" className="hover:text-ink transition-colors inline-flex items-center gap-1">
               <Github className="w-3.5 h-3.5" /> Source
             </a>
