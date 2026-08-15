@@ -7,17 +7,39 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const EXPLORER_URL = process.env.NEXT_PUBLIC_EXPLORER_URL || 'https://scan.bohr.life';
 
 // Both the compact (landing page) and full (/threats) feeds pull the same
-// depth of real history now — 250 last-monitored transactions each. This
-// used to be split 50/250 with a "simulated demo" toggle standing in for
-// the compact view when live traffic was thin; the toggle and the fake
+// depth of real history per poll — 250 latest monitored transactions each.
+// This used to be split 50/250 with a "simulated demo" toggle standing in
+// for the compact view when live traffic was thin; the toggle and the fake
 // data behind it are gone, this is live-only, always.
 const FEED_LIMIT = 250;
+
+// Matches the backend's MAX_ALERTS cap (store.js) — the most alerts the
+// server itself ever retains. No point accumulating past what the backend
+// could ever hand back.
+const FEED_CAP = 5000;
 
 // This is the "Live threat feed," so it should only ever show actual
 // threats — LOW-risk entries (T002 dust, routine transfers with no rule
 // matched, etc.) are recorded by the backend for the full alert history but
 // aren't threats, so they're filtered out here before render.
 const isThreat = (a) => (a.risk || a.severity || 'LOW') !== 'LOW';
+
+// Each poll only fetches the latest FEED_LIMIT alerts of ANY severity, so a
+// real threat can fall out of that window once enough routine activity
+// piles up after it — even though it's still a real, unresolved threat.
+// Instead of replacing the feed wholesale every 5s (which also caused the
+// visible list to flicker/reset), this merges each poll's threats into
+// what's already accumulated client-side, keyed by the backend's own
+// unique `id`, newest first, capped at FEED_CAP so it can't grow forever.
+function mergeThreats(previous, incoming) {
+  const byId = new Map(previous.map((a) => [a.id || a.hash || a.txHash, a]));
+  for (const a of incoming) {
+    byId.set(a.id || a.hash || a.txHash, a);
+  }
+  return Array.from(byId.values())
+    .sort((a, b) => new Date(b.time || b.timestamp || 0) - new Date(a.time || a.timestamp || 0))
+    .slice(0, FEED_CAP);
+}
 
 /**
  * The live threat feed — search, feed rows, AI verdicts, signed-proof
@@ -43,7 +65,11 @@ export default function ThreatFeed({ compact = false }) {
     const loadFeed = () => {
       fetch(`${API}/api/alerts/global?limit=${FEED_LIMIT}`)
         .then((r) => r.json())
-        .then((data) => setFeed(Array.isArray(data) ? data.filter(isThreat) : []))
+        .then((data) => {
+          if (!Array.isArray(data)) return;
+          const threats = data.filter(isThreat);
+          setFeed((prev) => mergeThreats(prev, threats));
+        })
         .catch(() => {});
     };
     loadFeed();
@@ -81,7 +107,7 @@ export default function ThreatFeed({ compact = false }) {
       </div>
 
       <p className="text-center font-mono text-[10px] text-faint mb-3">
-        polling every 5s · real production data · last {FEED_LIMIT} monitored transactions
+        polling every 5s · real production data · accumulates up to {FEED_CAP} flagged threats
       </p>
 
       <div className="relative mb-4">
@@ -123,7 +149,7 @@ export default function ThreatFeed({ compact = false }) {
         <div className={`divide-y divide-line ${compact ? '' : 'overflow-y-auto'}`}>
           {visible.map((a, i) => (
             <div
-              key={`${a.hash || a.txHash || i}-${i}`}
+              key={a.id || a.hash || a.txHash || i}
               className="px-4 py-3 flex flex-col gap-1.5 animate-fadeUp"
               style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}
             >
