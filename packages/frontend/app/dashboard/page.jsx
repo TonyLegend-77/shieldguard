@@ -7,7 +7,6 @@ import { useLanguage } from '../lib/i18n';
 import WalletBar from '../components/WalletBar';
 import ThemeToggle from '../components/ThemeToggle';
 import LanguageToggle from '../components/LanguageToggle';
-import PolicyDebugger from '../components/PolicyDebugger';
 import MyContracts from '../components/MyContracts';
 import ConnectionsPanel from '../components/ConnectionsPanel';
 import SdkTester from '../components/SdkTester';
@@ -45,7 +44,6 @@ export default function Dashboard() {
             <span className="font-display text-base text-ink">ShieldGuard</span>
           </div>
           <div className="hidden md:flex items-center gap-5 font-mono text-[11px] text-dim">
-            <a href="#debugger" className="hover:text-ink transition-colors">Debugger</a>
             <a href="#architecture" className="hover:text-ink transition-colors">Architecture</a>
             <a href="#integration" className="hover:text-ink transition-colors">Integration</a>
             <a href="https://github.com/TonyLegend-77/shieldguard" target="_blank" rel="noreferrer" className="hover:text-ink transition-colors inline-flex items-center gap-1">
@@ -61,23 +59,6 @@ export default function Dashboard() {
       </nav>
 
       <section className="max-w-6xl mx-auto px-5 pt-12 pb-10">
-        <span className="inline-flex items-center gap-1.5 bg-accentSoft text-accent text-xs font-medium rounded-full px-3 py-1 mb-5">
-          <span className="w-1.5 h-1.5 rounded-full bg-nominal animate-pulse" />
-          {t('hero.badge')}
-        </span>
-        <h1 className="font-display text-3xl md:text-4xl text-ink leading-tight mb-4 max-w-2xl">
-          {t('dash.hero.title')}
-        </h1>
-        <p className="text-body text-sm md:text-base leading-relaxed max-w-xl">
-          {t('dash.hero.body')}
-        </p>
-      </section>
-
-      <div id="debugger">
-        <PolicyDebugger />
-      </div>
-
-      <section className="max-w-6xl mx-auto px-5 py-10">
         {wallet.address ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <MyContracts wallet={wallet} />

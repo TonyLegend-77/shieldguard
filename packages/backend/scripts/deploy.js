@@ -50,13 +50,11 @@ async function main() {
   writeFileSync(MARKER_PATH, address);
 
   // Print in Railway-friendly format
-  console.log("
-╔════════════════════════════════════════════════════════════╗");
+  console.log("\n╔════════════════════════════════════════════════════════════╗");
   console.log("║  ADD THIS TO RAILWAY ENVIRONMENT VARIABLES                 ║");
   console.log("╠════════════════════════════════════════════════════════════╣");
   console.log("║  RECEIPT_REGISTRY_ADDRESS=" + address + "  ║");
-  console.log("╚════════════════════════════════════════════════════════════╝
-");
+  console.log("╚════════════════════════════════════════════════════════════╝\n");
 
   console.log("[deploy] Then restart the Railway service to pick it up.");
 }

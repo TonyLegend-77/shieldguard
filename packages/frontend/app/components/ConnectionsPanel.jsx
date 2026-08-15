@@ -9,6 +9,21 @@ const PREMIUM_PRICE_BOT = process.env.NEXT_PUBLIC_CONNECTIONS_PREMIUM_PRICE_BOT 
 const TREASURY = process.env.NEXT_PUBLIC_TREASURY_ADDRESS;
 const BOT_TOKEN = process.env.NEXT_PUBLIC_BOT_TOKEN_ADDRESS;
 const TELEGRAM_BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME; // e.g. "ShieldGuardAlertsBot", no @
+const BDEX_URL = 'https://dex.botchain.ai';
+
+// Same notice as MyContracts.jsx — payments are collected in WBOT (the
+// ERC-20 wrapped version), not native BOT, since native transfers don't
+// emit the Transfer event our backend verifies against.
+function WbotNotice() {
+  return (
+    <p className="font-mono text-[10px] text-faint">
+      Paid in WBOT (wrapped BOT), not native BOT. Only native BOT?{' '}
+      <a href={BDEX_URL} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+        Wrap it on BDEX first ↗
+      </a>
+    </p>
+  );
+}
 
 function usageColor(count, limit) {
   const pct = count / limit;
@@ -73,7 +88,7 @@ export default function ConnectionsPanel({ wallet }) {
   if (!address) return null;
 
   return (
-    <section className="border border-line bg-surface rounded-xl overflow-hidden animate-fadeUp">
+    <section id="connections" className="border border-line bg-surface rounded-xl overflow-hidden animate-fadeUp">
       <div className="border-b border-line px-4 py-3 flex items-center justify-between">
         <h2 className="font-display text-sm text-ink">Connected wallets &amp; agents</h2>
         <button
@@ -86,7 +101,7 @@ export default function ConnectionsPanel({ wallet }) {
       </div>
 
       {summary && (
-        <div className="px-4 py-3 border-b border-line flex items-center gap-4 font-mono text-[11px] text-dim">
+        <div className="px-4 py-3 border-b border-line flex items-center gap-4 font-mono text-[11px] text-dim flex-wrap">
           <span>
             TIER{' '}
             <span className={summary.tier === 'premium' ? 'text-nominal' : 'text-ink'}>
@@ -96,6 +111,11 @@ export default function ConnectionsPanel({ wallet }) {
           <span className="flex-1 max-w-[160px]">
             <UsageBar count={summary.used} limit={summary.limit} />
           </span>
+          {summary.txLimit != null && (
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              ALERTS <span className="text-ink">{summary.txUsed}</span>/{summary.txLimit}
+            </span>
+          )}
           <span className="flex items-center gap-1">
             <Send className="w-3 h-3" />
             {summary.telegramLinked ? (
@@ -287,12 +307,13 @@ function ConnectForm({ wallet, summary, onAdded }) {
       {atLimit && isFree && (
         <p className="font-mono text-[11px] text-caution flex items-center gap-1">
           <Lock className="w-3 h-3" />
-          Free tier limit reached — upgrade to premium ({PREMIUM_PRICE_BOT} $BOT) for up to 20 connections.
+          Free tier limit reached — upgrade to premium ({PREMIUM_PRICE_BOT} $BOT) for up to 20 connections and 1,000 alerts.
         </p>
       )}
       {atLimit && !isFree && (
-        <p className="font-mono text-[11px] text-critical">Premium limit (20) reached.</p>
+        <p className="font-mono text-[11px] text-critical">Premium limit (20 connections) reached.</p>
       )}
+      {atLimit && isFree && canUpgrade && <WbotNotice />}
 
       <div className="flex items-center gap-3">
         {!atLimit && (

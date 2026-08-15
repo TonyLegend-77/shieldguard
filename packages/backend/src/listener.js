@@ -405,7 +405,7 @@ function createHandlers(target, contract) {
     });
     trackSeenAddress(target.address, to);
 
-    if (result.risk === "LOW") {
+    if (result.matched_rules.length === 0) {
       recordEvent({
         token: target.name,
         tokenAddress: target.address,
@@ -421,9 +421,14 @@ function createHandlers(target, contract) {
         anchored: false,
       });
     } else {
-      // Flagged as possible address poisoning (T001) or unsolicited dust
-      // (T002) — runs through the full verdict/sign/anchor pipeline like
-      // any other detector.
+      // Flagged as possible address poisoning (T001, HIGH) or unsolicited
+      // dust (T002, LOW score by design) — both run through the shared
+      // pipeline. T002 stays LOW risk so processFlaggedResult's
+      // `result.risk !== "LOW"` gate skips the AI verdict/sign/anchor step
+      // for it, but this still records the real reason and rule code
+      // instead of the two being relabeled as a routine transfer with no
+      // rules matched, which is what happened before this branch checked
+      // matched_rules instead of risk.
       await processFlaggedResult(target, result, {
         txHash: event.log.transactionHash,
         from,

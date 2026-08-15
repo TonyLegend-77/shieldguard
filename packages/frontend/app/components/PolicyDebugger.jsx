@@ -86,6 +86,8 @@ function buildSteps(res) {
 const FALLBACK_T = {
   'debugger.label': 'Policy engine debugger',
   'debugger.title': 'Watch the pipeline decide.',
+  'debugger.body':
+    'This calls your real /api/oracle/evaluate endpoint. Same hard-floor rules and AI advisory a real transaction gets, no scripted outcome.',
 };
 
 export default function PolicyDebugger({ t = (k) => FALLBACK_T[k] || k }) {
@@ -142,10 +144,7 @@ export default function PolicyDebugger({ t = (k) => FALLBACK_T[k] || k }) {
             <p className="text-xs font-medium tracking-wide text-dim uppercase mb-2">{t('debugger.label')}</p>
             <h2 className="font-display text-2xl md:text-3xl text-ink leading-snug">{t('debugger.title')}</h2>
           </div>
-          <p className="text-sm text-body max-w-sm">
-            This calls your real <code className="font-mono">/api/oracle/evaluate</code> endpoint. Same hard-floor
-            rules and AI advisory a real transaction gets, no scripted outcome.
-          </p>
+          <p className="text-sm text-body max-w-sm">{t('debugger.body')}</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">

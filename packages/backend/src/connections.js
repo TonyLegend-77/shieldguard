@@ -1,6 +1,7 @@
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import crypto from "node:crypto";
+import { getBotTokenDecimalsStrict } from "./botToken.js";
 
 // Personal dashboard connections: a wallet owner registers wallets/agents
 // they want watched, links a Telegram account, and gets alerts routed to
@@ -14,11 +15,25 @@ import crypto from "node:crypto";
 
 export const FREE_CONNECTION_LIMIT = 1;
 export const PREMIUM_CONNECTION_LIMIT = 20;
-export const PREMIUM_PRICE_BOT = 1n * 10n ** 18n; // 1 BOT token, assuming 18 decimals — VERIFY against the real WBOT contract's decimals() before relying on this in production, not assumed here.
+// Whole-token units, not wei — verifyAndUpgrade converts this to the actual
+// required amount using the token's real decimals() (see botToken.js),
+// instead of the previous hardcoded "1n * 10n ** 18n" that assumed 18
+// decimals without checking.
+export const PREMIUM_PRICE_BOT = 1;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const USE_SQLITE = process.env.USE_SQLITE === "true";
 const DB_PATH = process.env.SQLITE_PATH || join(__dirname, "..", "shieldguard.db");
+
+// Prevents the same $BOT payment tx from being replayed to upgrade more
+// than one ownerAddress to premium. Same protection webhook.js already
+// applies to private-tier contract payments (usedPaymentTxs there) — this
+// mirrors it for connection upgrades. In-memory only: on restart a
+// previously-used tx could in theory be replayed once more, same tradeoff
+// webhook.js accepts for the same reason (paymentTx is also stored on the
+// owner record for manual audit). If USE_SQLITE is on, persisted below via
+// the premiumPaymentTx column check instead, which survives restarts.
+const usedPaymentTxs = new Set();
 
 // --- Storage backend ---
 // In-memory by default (resets on restart, fine for dev/demo). If
@@ -225,14 +240,24 @@ export function findWatchersOf(address) {
 }
 
 /**
- * Verifies an on-chain payment of >= 1 BOT token to the treasury address
- * before upgrading a connection owner to premium. Requires WBOT_ADDRESS
- * and TREASURY_ADDRESS env vars, and an ethers provider.
+ * Verifies an on-chain payment of >= PREMIUM_PRICE_BOT (1) BOT token to the
+ * treasury address before upgrading a connection owner to premium. Requires
+ * BOT_TOKEN_ADDRESS and TREASURY_ADDRESS env vars, and an ethers provider.
+ * The required amount is scaled using the token's real decimals() (see
+ * botToken.js), not an assumed 18.
  *
  * NOT RUNTIME TESTED — no network access in the environment this was
- * written in to verify against a real transaction or confirm WBOT's actual
- * decimals(). Verify decimals() on the real WBOT contract before trusting
- * PREMIUM_PRICE_BOT's 18-decimals assumption.
+ * written in to verify against a real transaction.
+ *
+ * Two checks that were previously missing (found during debugging, see
+ * webhook.js's verifyBotPayment for the pattern this now mirrors):
+ * - Replay protection: without it, one qualifying payment tx could be
+ *   reused to upgrade any number of different ownerAddress values, since
+ *   nothing recorded a tx hash as already claimed.
+ * - Sender check: without it, the Transfer log's `from` was never compared
+ *   to ownerAddress, so any historical tx that sent >= 1 BOT to the
+ *   treasury — including someone else's payment — could upgrade an
+ *   unrelated wallet.
  */
 export async function verifyAndUpgrade(ownerAddress, paymentTxHash, provider) {
   const { ethers } = await import("ethers");
@@ -246,6 +271,23 @@ export async function verifyAndUpgrade(ownerAddress, paymentTxHash, provider) {
   const treasuryAddress = process.env.TREASURY_ADDRESS;
   if (!botTokenAddress || !treasuryAddress) {
     return { ok: false, reason: "BOT_TOKEN_ADDRESS / TREASURY_ADDRESS not configured on the server" };
+  }
+
+  const normalizedTx = paymentTxHash.toLowerCase();
+
+  // Reject a tx hash that's already been claimed, either this process's
+  // lifetime (in-memory Set, matches webhook.js) or ever (SQLite record,
+  // survives restart when USE_SQLITE is on).
+  if (usedPaymentTxs.has(normalizedTx)) {
+    return { ok: false, reason: "This payment transaction has already been used to upgrade an account" };
+  }
+  if (USE_SQLITE) {
+    const alreadyClaimed = db
+      .prepare("SELECT ownerAddress FROM connection_owners WHERE lower(premiumPaymentTx) = ?")
+      .get(normalizedTx);
+    if (alreadyClaimed) {
+      return { ok: false, reason: "This payment transaction has already been used to upgrade an account" };
+    }
   }
 
   const receipt = await provider.getTransactionReceipt(paymentTxHash);
@@ -266,12 +308,35 @@ export async function verifyAndUpgrade(ownerAddress, paymentTxHash, provider) {
   }
 
   const parsed = iface.parseLog(matchingLog);
-  const { to, value } = parsed.args;
+  const { from, to, value } = parsed.args;
   if (to.toLowerCase() !== treasuryAddress.toLowerCase()) {
     return { ok: false, reason: "Transfer was not sent to the ShieldGuard treasury address" };
   }
-  if (value < PREMIUM_PRICE_BOT) {
-    return { ok: false, reason: `Transfer amount below required 1 BOT (assuming 18 decimals — verify this)` };
+  // The paying wallet must be the account being upgraded — otherwise any
+  // qualifying payment anyone ever sent to the treasury could be pointed at
+  // an unrelated ownerAddress.
+  if (from.toLowerCase() !== ownerAddress.toLowerCase()) {
+    return { ok: false, reason: "Payment sender does not match the account being upgraded" };
+  }
+
+  // Required amount in the token's actual base units — reads decimals()
+  // off the real contract instead of assuming 18, which was the previous
+  // behavior (PREMIUM_PRICE_BOT used to be a pre-scaled 18-decimals bigint
+  // constant). Fails closed: if decimals() can't be resolved, reject the
+  // upgrade rather than fall back to a guessed value on a money path.
+  let decimals;
+  try {
+    decimals = await getBotTokenDecimalsStrict(provider, botTokenAddress);
+  } catch (err) {
+    console.error(`[connections] Could not resolve BOT token decimals() for upgrade verification: ${err.message}`);
+    return { ok: false, reason: "Could not verify the BOT token contract right now — try again shortly" };
+  }
+  const requiredAmount = BigInt(PREMIUM_PRICE_BOT) * 10n ** BigInt(decimals);
+  if (value < requiredAmount) {
+    return {
+      ok: false,
+      reason: `Transfer amount below required ${PREMIUM_PRICE_BOT} BOT (token uses ${decimals} decimals)`,
+    };
   }
 
   const key = ownerAddress.toLowerCase();
@@ -281,6 +346,7 @@ export async function verifyAndUpgrade(ownerAddress, paymentTxHash, provider) {
   } else {
     memOwners.set(key, { ...memOwners.get(key), tier: "premium", premiumPaymentTx: paymentTxHash });
   }
+  usedPaymentTxs.add(normalizedTx);
 
   return { ok: true, summary: getConnectionSummary(key) };
 }

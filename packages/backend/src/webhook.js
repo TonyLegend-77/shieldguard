@@ -5,6 +5,7 @@ import {
   getGuardianStats,
   canUserAddMoreContracts,
 } from "./storeAdapter.js";
+import { getBotTokenDecimalsStrict, verifyBotTokenDecimalsAtStartup } from "./botToken.js";
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const TRANSFER_ABI = ["event Transfer(address indexed from, address indexed to, uint256 value)"];
@@ -56,8 +57,16 @@ async function verifyBotPayment(provider, txHash, expectedFromAddress) {
     if (to.toLowerCase() !== treasury) continue;
     if (expectedFromAddress && from.toLowerCase() !== expectedFromAddress.toLowerCase()) continue;
 
-    // $BOT assumed 18 decimals, matching other BOT Chain ERC20s in this repo.
-    const amount = Number(value) / 1e18;
+    // Reads the real decimals() off the BOT token contract instead of
+    // assuming 18 — see botToken.js. Fails closed: if decimals() can't be
+    // resolved, reject this payment rather than check it against a guess.
+    let decimals;
+    try {
+      decimals = await getBotTokenDecimalsStrict(provider, botToken);
+    } catch (err) {
+      return { valid: false, reason: `Could not verify the BOT token contract right now — try again shortly (${err.message})` };
+    }
+    const amount = Number(value) / 10 ** decimals;
     if (amount >= requiredAmount) {
       return { valid: true, from, to, amount };
     }
@@ -71,6 +80,14 @@ async function verifyBotPayment(provider, txHash, expectedFromAddress) {
 // since listener.js is also the module that imports this one.
 export function setupWebhook(app, deps) {
   const { addDynamicWatch, removeDynamicWatch, provider } = deps;
+
+  // Resolve and cache the real BOT token decimals() once at startup, logged
+  // loudly either way — see botToken.js. Not awaited here since
+  // setupWebhook itself is synchronous (called from listener.js's main()
+  // alongside everything else); the log line lands within one RPC round
+  // trip of boot either way, and every payment-verification call after
+  // that hits the warm cache instead of re-resolving.
+  verifyBotTokenDecimalsAtStartup(provider, process.env.BOT_TOKEN_ADDRESS);
 
   app.use(express.json());
 
