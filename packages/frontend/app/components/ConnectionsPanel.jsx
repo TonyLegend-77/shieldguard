@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Plus, Send, Lock, Unlock, Loader2, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { sendBotPayment } from '../lib/erc20';
 
@@ -91,13 +92,24 @@ export default function ConnectionsPanel({ wallet }) {
     <section id="connections" className="border border-line bg-surface rounded-xl overflow-hidden animate-fadeUp">
       <div className="border-b border-line px-4 py-3 flex items-center justify-between">
         <h2 className="font-display text-sm text-ink">Connected wallets &amp; agents</h2>
-        <button
-          onClick={() => setFormOpen((v) => !v)}
-          className="inline-flex items-center gap-1 font-mono text-[10px] text-accent border border-accent/40 rounded-full px-2 py-1 hover:bg-accentSoft transition-colors"
-        >
-          <Plus className="w-3 h-3" />
-          CONNECT
-        </button>
+        <div className="flex items-center gap-2">
+          {summary?.tier === 'free' && (
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-1 font-mono text-[10px] text-dim border border-line rounded-full px-2 py-1 hover:text-ink hover:border-accent/40 transition-colors"
+            >
+              <Unlock className="w-3 h-3" />
+              UPGRADE
+            </Link>
+          )}
+          <button
+            onClick={() => setFormOpen((v) => !v)}
+            className="inline-flex items-center gap-1 font-mono text-[10px] text-accent border border-accent/40 rounded-full px-2 py-1 hover:bg-accentSoft transition-colors"
+          >
+            <Plus className="w-3 h-3" />
+            CONNECT
+          </button>
+        </div>
       </div>
 
       {summary && (
