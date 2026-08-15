@@ -13,6 +13,12 @@ const EXPLORER_URL = process.env.NEXT_PUBLIC_EXPLORER_URL || 'https://scan.bohr.
 // data behind it are gone, this is live-only, always.
 const FEED_LIMIT = 250;
 
+// This is the "Live threat feed," so it should only ever show actual
+// threats — LOW-risk entries (T002 dust, routine transfers with no rule
+// matched, etc.) are recorded by the backend for the full alert history but
+// aren't threats, so they're filtered out here before render.
+const isThreat = (a) => (a.risk || a.severity || 'LOW') !== 'LOW';
+
 /**
  * The live threat feed — search, feed rows, AI verdicts, signed-proof
  * links, all of it. Extracted out of the landing page (page.jsx) so it can
@@ -37,7 +43,7 @@ export default function ThreatFeed({ compact = false }) {
     const loadFeed = () => {
       fetch(`${API}/api/alerts/global?limit=${FEED_LIMIT}`)
         .then((r) => r.json())
-        .then((data) => setFeed(Array.isArray(data) ? data : []))
+        .then((data) => setFeed(Array.isArray(data) ? data.filter(isThreat) : []))
         .catch(() => {});
     };
     loadFeed();
@@ -57,7 +63,7 @@ export default function ThreatFeed({ compact = false }) {
     const id = setTimeout(() => {
       fetch(`${API}/api/alerts/global?q=${encodeURIComponent(query.trim())}&limit=${FEED_LIMIT}`)
         .then((r) => r.json())
-        .then((data) => setSearchResults(Array.isArray(data) ? data : []))
+        .then((data) => setSearchResults(Array.isArray(data) ? data.filter(isThreat) : []))
         .catch(() => setSearchResults([]))
         .finally(() => setSearching(false));
     }, 350);
